@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Welcome to FieldOps</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 20px;
+    }
+
+    .wrapper {
+      width: 100%;
+      max-width: 520px;
+    }
+
+    .container {
+      background: #1e293b;
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 25px 50px rgba(0, 0, 0, 0.4);
+    }
+
+    .header {
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      padding: 40px 32px;
+      text-align: center;
+    }
+
+    .logo {
+      font-size: 28px;
+      font-weight: 800;
+      color: #fff;
+      letter-spacing: -0.5px;
+    }
+
+    .logo span {
+      color: #c7d2fe;
+      font-weight: 400;
+    }
+
+    .header-icon {
+      width: 64px;
+      height: 64px;
+      background: rgba(255, 255, 255, 0.15);
+      border-radius: 16px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 16px;
+      font-size: 32px;
+    }
+
+    .body {
+      padding: 36px 32px;
+    }
+
+    .greeting {
+      font-size: 22px;
+      font-weight: 700;
+      color: #f8fafc;
+      margin-bottom: 12px;
+    }
+
+    .message {
+      font-size: 15px;
+      line-height: 1.7;
+      color: #94a3b8;
+      margin-bottom: 24px;
+    }
+
+    .cta {
+      display: inline-block;
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      color: #fff;
+      text-decoration: none;
+      padding: 14px 32px;
+      border-radius: 10px;
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+    }
+
+    .divider {
+      height: 1px;
+      background: #334155;
+      margin: 0 32px;
+    }
+
+    .footer {
+      padding: 24px 32px;
+      text-align: center;
+      font-size: 12px;
+      color: #475569;
+    }
+
+    .footer a {
+      color: #818cf8;
+      text-decoration: none;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="wrapper">
+    <div class="container">
+      <div class="header">
+        <div class="header-icon">&#10024;</div>
+        <div class="logo">Field<span>Ops</span></div>
+      </div>
+      <div class="body">
+        <div class="greeting">Welcome aboard, <%= name %>!</div>
+        <p class="message">
+          Your account has been created successfully. FieldOps gives you the power to manage field operations, track
+          tasks, and collaborate with your team — all from one place.
+        </p>
+        <a href="#" class="cta">Get Started</a>
+      </div>
+      <div class="divider"></div>
+      <div class="footer">
+        &copy; 2026 FieldOps. All rights reserved.
+      </div>
+    </div>
+  </div>
+</body>
+
+</html>
