@@ -1,24 +1,21 @@
 model User {
-  id       String  @id @default(uuid())
-  name     String
-  email    String  @unique
-  password String?
+  id            String       @id @default(uuid())
+  name          String
+  email         String       @unique
+  password      String?
+  role          Role         @default(CUSTOMER)
+  phone         String?
+  avatar        String?
+  status        UserStatus   @default(ACTIVE)
+  emailVerified Boolean      @default(false)
+  googleId      String?      @unique
+  authProvider  AuthProvider @default(CREDENTIAL)
 
-  role   Role       @default(CUSTOMER)
-  phone  String?
-  avatar String?
-  status UserStatus @default(ACTIVE)
+  technicianProfile TechnicianProfile?
 
-  emailVerified Boolean @default(false)
+  customerBookings Booking[] @relation("CustomerBookings")
 
-  googleId     String?      @unique
-  authProvider AuthProvider @default(CREDENTIAL)
-
-  // technicianProfile TechnicianProfile?
-
-  // customerBookings Booking[] @relation("CustomerBookings")
-
-  // reviews Review[]
+  reviews Review[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

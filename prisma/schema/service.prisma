@@ -1,0 +1,20 @@
+model Service {
+  id          String  @id @default(uuid())
+  title       String
+  slug        String  @unique
+  description String
+  category    String
+  price       Decimal @db.Decimal(10, 2)
+  duration    Int
+  image       String?
+  isActive    Boolean @default(true)
+
+  bookings Booking[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([category])
+  @@index([isActive])
+  @@map("services")
+}
