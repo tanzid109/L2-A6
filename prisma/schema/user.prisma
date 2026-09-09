@@ -1,0 +1,29 @@
+model User {
+  id       String  @id @default(uuid())
+  name     String
+  email    String  @unique
+  password String?
+
+  role   Role       @default(CUSTOMER)
+  phone  String?
+  avatar String?
+  status UserStatus @default(ACTIVE)
+
+  emailVerified Boolean @default(false)
+
+  googleId     String?      @unique
+  authProvider AuthProvider @default(CREDENTIAL)
+
+  // technicianProfile TechnicianProfile?
+
+  // customerBookings Booking[] @relation("CustomerBookings")
+
+  // reviews Review[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([role])
+  @@index([status])
+  @@map("users")
+}
