@@ -6,6 +6,7 @@ model User {
   role          Role         @default(CUSTOMER)
   phone         String?
   avatar        String?
+  avatarPublicId String? @default("")
   status        UserStatus   @default(ACTIVE)
   emailVerified Boolean      @default(false)
   googleId      String?      @unique
