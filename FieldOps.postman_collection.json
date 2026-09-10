@@ -2,7 +2,7 @@
   "info": {
     "name": "FieldOps System Backend",
     "_postman_id": "fieldops-api-collection",
-    "description": "API Collection for FieldOps System Backend - Auth & Service modules",
+    "description": "API Collection for FieldOps System Backend - Auth, Service, Technician & Availability modules",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -404,6 +404,341 @@
               ]
             },
             "description": "Requires ADMIN role. Soft delete - sets isActive to false"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Technicians",
+      "item": [
+        {
+          "name": "Get All Technicians",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/technicians?search=&specialization=&isAvailable=&minRate=&maxRate=&page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "technicians"],
+              "query": [
+                {
+                  "key": "search",
+                  "value": "",
+                  "description": "Search by specialization, bio or name"
+                },
+                {
+                  "key": "specialization",
+                  "value": "",
+                  "description": "Filter by specialization"
+                },
+                {
+                  "key": "isAvailable",
+                  "value": "",
+                  "description": "Filter by availability (true/false)"
+                },
+                {
+                  "key": "minRate",
+                  "value": "",
+                  "description": "Minimum hourly rate"
+                },
+                {
+                  "key": "maxRate",
+                  "value": "",
+                  "description": "Maximum hourly rate"
+                },
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Page number"
+                },
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "description": "Items per page (max 100)"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Technician By ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/technicians/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "technicians", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "technician-profile-uuid"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Technician Profile",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "bio",
+                  "value": "Certified HVAC technician with 8+ years experience in residential and commercial systems",
+                  "type": "text"
+                },
+                {
+                  "key": "experience",
+                  "value": "8",
+                  "type": "text"
+                },
+                {
+                  "key": "specialization",
+                  "value": "HVAC",
+                  "type": "text"
+                },
+                {
+                  "key": "hourlyRate",
+                  "value": "1200",
+                  "type": "text"
+                },
+                {
+                  "key": "profileImage",
+                  "type": "file",
+                  "src": null
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/technicians/profile",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "technicians", "profile"]
+            },
+            "description": "Requires TECHNICIAN role. Send as multipart/form-data. profileImage is optional."
+          },
+          "response": []
+        },
+        {
+          "name": "Get My Technician Profile",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/technicians/profile/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "technicians", "profile", "me"]
+            },
+            "description": "Requires TECHNICIAN role"
+          },
+          "response": []
+        },
+        {
+          "name": "Update My Technician Profile",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "bio",
+                  "value": "Senior HVAC technician with 10+ years experience. Specialize in commercial cooling systems.",
+                  "type": "text"
+                },
+                {
+                  "key": "experience",
+                  "value": "10",
+                  "type": "text"
+                },
+                {
+                  "key": "hourlyRate",
+                  "value": "1500",
+                  "type": "text"
+                },
+                {
+                  "key": "profileImage",
+                  "type": "file",
+                  "src": null
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/technicians/profile/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "technicians", "profile", "me"]
+            },
+            "description": "Requires TECHNICIAN role. Send as multipart/form-data. All fields are optional, including profileImage."
+          },
+          "response": []
+        },
+        {
+          "name": "Toggle Availability",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/technicians/availability/toggle",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "technicians", "availability", "toggle"]
+            },
+            "description": "Requires TECHNICIAN role. Toggles isAvailable flag."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Availability",
+      "item": [
+        {
+          "name": "Create Availability",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"date\": \"2026-09-15T00:00:00.000Z\",\n  \"startTime\": \"09:00\",\n  \"endTime\": \"12:00\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/availability",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "availability"]
+            },
+            "description": "Requires TECHNICIAN role. date must be ISO datetime. Times in HH:MM 24-hour format."
+          },
+          "response": []
+        },
+        {
+          "name": "Get My Availability",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/availability/my?date=&isBooked=&page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "availability", "my"],
+              "query": [
+                {
+                  "key": "date",
+                  "value": "",
+                  "description": "Filter by date (ISO)"
+                },
+                {
+                  "key": "isBooked",
+                  "value": "",
+                  "description": "Filter by booked status (true/false)"
+                },
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Page number"
+                },
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "description": "Items per page (max 100)"
+                }
+              ]
+            },
+            "description": "Requires TECHNICIAN role"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Technician Availability",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/availability/technician/:technicianId?date=&page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "availability", "technician", ":technicianId"],
+              "query": [
+                {
+                  "key": "date",
+                  "value": "",
+                  "description": "Filter by date (ISO)"
+                },
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Page number"
+                },
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "description": "Items per page (max 100)"
+                }
+              ],
+              "variable": [
+                {
+                  "key": "technicianId",
+                  "value": "technician-profile-uuid"
+                }
+              ]
+            },
+            "description": "Public endpoint. Only shows unbooked slots by default."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Availability",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"startTime\": \"10:00\",\n  \"endTime\": \"14:00\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/availability/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "availability", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "availability-uuid"
+                }
+              ]
+            },
+            "description": "Requires TECHNICIAN role. Can only update own unbooked slots."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Availability",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/availability/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "availability", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "availability-uuid"
+                }
+              ]
+            },
+            "description": "Requires TECHNICIAN role. Can only delete own unbooked slots."
           },
           "response": []
         }
