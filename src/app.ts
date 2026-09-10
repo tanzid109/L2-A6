@@ -8,6 +8,7 @@ import { globalErrorHandler } from './middleware/globalErrorHandler'
 import { notFound } from './middleware/notFound'
 import { ServiceRoutes } from './module/service/service.route'
 import { TechnicianRoutes } from './module/technician/technician.route'
+import { AvailabilityRoutes } from './module/availability/availability.route'
 
 
 const app: Application = express()
@@ -29,6 +30,7 @@ app.use(cookieParser())
 app.use('/api/v1/auth', AuthRoutes)
 app.use("/api/v1/services", ServiceRoutes)
 app.use("/api/v1/technicians", TechnicianRoutes)
+app.use("/api/v1/availability", AvailabilityRoutes)
 
 // Basic route
 app.get('/', async (req: Request, res: Response) => {
