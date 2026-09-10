@@ -6,6 +6,7 @@ import config from './config'
 import { AuthRoutes } from './module/auth/auth.route'
 import { globalErrorHandler } from './middleware/globalErrorHandler'
 import { notFound } from './middleware/notFound'
+import { ServiceRoutes } from './module/service/service.route'
 
 
 const app: Application = express()
@@ -25,6 +26,7 @@ app.use(express.json())
 app.use(cookieParser())
 
 app.use('/api/v1/auth', AuthRoutes)
+app.use("/api/v1/services", ServiceRoutes)
 
 // Basic route
 app.get('/', async (req: Request, res: Response) => {

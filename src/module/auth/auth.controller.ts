@@ -5,7 +5,7 @@ import { AuthService } from "./auth.service";
 import { sendResponse } from "../../utils/sendResponse";
 
 const registerUser = catchAsync(async (req: Request, res: Response) => {
-	const result = await AuthService.registerUser(req.body);
+	const result = await AuthService.registerCustomer(req.body);
 
 	sendResponse(res, {
 		statusCode: httpStatus.OK,
@@ -16,7 +16,7 @@ const registerUser = catchAsync(async (req: Request, res: Response) => {
 });
 
 const verifyEmail = catchAsync(async (req: Request, res: Response) => {
-	const result = await AuthService.verifyEmail(req.body);
+	const result = await AuthService.verifyCustomerEmail(req.body);
 
 	sendResponse(res, {
 		statusCode: httpStatus.OK,
