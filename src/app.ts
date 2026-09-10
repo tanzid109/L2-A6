@@ -10,6 +10,8 @@ import { ServiceRoutes } from './module/service/service.route'
 import { TechnicianRoutes } from './module/technician/technician.route'
 import { AvailabilityRoutes } from './module/availability/availability.route'
 import { BookingRoutes } from './module/booking/booking.route'
+import { PaymentRoutes } from './module/payment/payment.route'
+import { PaymentController } from './module/payment/payment.controller'
 
 
 const app: Application = express()
@@ -24,6 +26,14 @@ app.use(
 // Enable URL-encoded form data parsing
 app.use(express.urlencoded({ extended: true }))
 
+// Stripe webhook must receive the raw body for signature verification,
+// so it is mounted BEFORE the global JSON body parser.
+app.post(
+    '/api/v1/payments/webhook',
+    express.raw({ type: 'application/json' }),
+    PaymentController.stripeWebhook,
+)
+
 // Middleware to parse JSON bodies
 app.use(express.json())
 app.use(cookieParser())
@@ -33,6 +43,7 @@ app.use("/api/v1/services", ServiceRoutes)
 app.use("/api/v1/technicians", TechnicianRoutes)
 app.use("/api/v1/availability", AvailabilityRoutes)
 app.use("/api/v1/bookings", BookingRoutes)
+app.use("/api/v1/payments", PaymentRoutes)
 
 // Basic route
 app.get('/', async (req: Request, res: Response) => {
