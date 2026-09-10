@@ -2,7 +2,7 @@
   "info": {
     "name": "FieldOps System Backend",
     "_postman_id": "fieldops-api-collection",
-    "description": "API Collection for FieldOps System Backend - Auth, Service, Technician & Availability modules",
+    "description": "API Collection for FieldOps System Backend - Auth, Service, Technician, Availability, Booking & Payment modules",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -739,6 +739,271 @@
               ]
             },
             "description": "Requires TECHNICIAN role. Can only delete own unbooked slots."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Bookings",
+      "item": [
+        {
+          "name": "Create Booking",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"technicianId\": \"technician-profile-uuid\",\n  \"serviceId\": \"service-uuid\",\n  \"availabilityId\": \"availability-uuid\",\n  \"address\": \"House 12, Road 5, Dhanmondi, Dhaka\",\n  \"problemDescription\": \"AC not cooling properly, needs repair and gas refill\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/bookings",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "bookings"]
+            },
+            "description": "Requires CUSTOMER role. Creates a PENDING booking and marks the availability slot as booked."
+          },
+          "response": []
+        },
+        {
+          "name": "Get My Bookings (Customer)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/bookings/my?status=&page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "bookings", "my"],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "",
+                  "description": "PENDING, ACCEPTED, REJECTED, IN_PROGRESS, COMPLETED, CANCELLED"
+                },
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Page number"
+                },
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "description": "Items per page (max 100)"
+                }
+              ]
+            },
+            "description": "Requires CUSTOMER role"
+          },
+          "response": []
+        },
+        {
+          "name": "Get My Bookings (Technician)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/bookings/technician/my?status=&page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "bookings", "technician", "my"],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "",
+                  "description": "PENDING, ACCEPTED, REJECTED, IN_PROGRESS, COMPLETED, CANCELLED"
+                },
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Page number"
+                },
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "description": "Items per page (max 100)"
+                }
+              ]
+            },
+            "description": "Requires TECHNICIAN role"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Booking By ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/bookings/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "bookings", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "booking-uuid"
+                }
+              ]
+            },
+            "description": "Requires CUSTOMER or TECHNICIAN role. Only the involved customer or technician can view."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Booking Status",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"ACCEPTED\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/bookings/:id/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "bookings", ":id", "status"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "booking-uuid"
+                }
+              ]
+            },
+            "description": "Requires TECHNICIAN role. Transitions: PENDING->ACCEPTED/REJECTED/CANCELLED, ACCEPTED->IN_PROGRESS/CANCELLED, IN_PROGRESS->COMPLETED/CANCELLED. Rejecting/cancelling frees the availability slot."
+          },
+          "response": []
+        },
+        {
+          "name": "Cancel Booking",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/bookings/:id/cancel",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "bookings", ":id", "cancel"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "booking-uuid"
+                }
+              ]
+            },
+            "description": "Requires CUSTOMER role. Can only cancel PENDING or ACCEPTED bookings. Frees the availability slot."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Payments",
+      "item": [
+        {
+          "name": "Create Stripe Checkout",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"bookingId\": \"booking-uuid\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/payments/checkout",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "payments", "checkout"]
+            },
+            "description": "Requires CUSTOMER role. Only works for ACCEPTED bookings that are not already paid."
+          },
+          "response": []
+        },
+        {
+          "name": "Stripe Webhook",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Stripe-Signature",
+                "value": "t=timestamp,v1=signature"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"evt_test_webhook\",\n  \"object\": \"event\",\n  \"type\": \"checkout.session.completed\",\n  \"data\": {\n    \"object\": {\n      \"id\": \"cs_test_123\",\n      \"metadata\": {\n        \"bookingId\": \"booking-uuid\",\n        \"customerId\": \"customer-uuid\"\n      },\n      \"payment_intent\": \"pi_test_123\",\n      \"payment_status\": \"paid\"\n    }\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/payments/webhook",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "payments", "webhook"]
+            },
+            "description": "Stripe webhook. Requires a valid Stripe-Signature header. Best tested via Stripe CLI: stripe listen --forward-to localhost:5000/api/v1/payments/webhook"
+          },
+          "response": []
+        },
+        {
+          "name": "Get My Payments",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/payments/my?status=&page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "payments", "my"],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "",
+                  "description": "PENDING, PAID, FAILED, CANCELLED, REFUNDED"
+                },
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Page number"
+                },
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "description": "Items per page (max 100)"
+                }
+              ]
+            },
+            "description": "Requires CUSTOMER role"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Payment By ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/payments/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "payments", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "payment-uuid"
+                }
+              ]
+            },
+            "description": "Requires CUSTOMER role. Can only view own payment."
           },
           "response": []
         }
