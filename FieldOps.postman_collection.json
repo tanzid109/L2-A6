@@ -1008,6 +1008,53 @@
           "response": []
         }
       ]
+    },
+    {
+      "name": "Analytics",
+      "item": [
+        {
+          "name": "Admin Analytics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/analytics/admin",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "analytics", "admin"]
+            },
+            "description": "Requires ADMIN role. Totals across the whole platform: technicians, customers, services, bookings, revenue, refunds."
+          },
+          "response": []
+        },
+        {
+          "name": "Customer Analytics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/analytics/customer",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "analytics", "customer"]
+            },
+            "description": "Requires CUSTOMER role. Own bookings breakdown and total amount spent."
+          },
+          "response": []
+        },
+        {
+          "name": "Technician Analytics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/analytics/technician",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "analytics", "technician"]
+            },
+            "description": "Requires TECHNICIAN role. Own availability slots, bookings breakdown, total earnings, rating."
+          },
+          "response": []
+        }
+      ]
     }
   ]
 }

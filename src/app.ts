@@ -13,6 +13,7 @@ import { BookingRoutes } from './module/booking/booking.route'
 import { PaymentRoutes } from './module/payment/payment.route'
 import { PaymentController } from './module/payment/payment.controller'
 import { ReviewRoutes } from './module/review/review.route'
+import { AnalyticsRoutes } from './module/analytics/analytics.route'
 
 
 const app: Application = express()
@@ -47,6 +48,7 @@ app.use("/api/v1/availability", AvailabilityRoutes)
 app.use("/api/v1/bookings", BookingRoutes)
 app.use("/api/v1/payments", PaymentRoutes)
 app.use("/api/v1/reviews", ReviewRoutes)
+app.use("/api/v1/analytics", AnalyticsRoutes)
 
 // Basic route
 app.get('/', async (req: Request, res: Response) => {
