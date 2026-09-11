@@ -59,6 +59,21 @@ const getMe = catchAsync(async (req: Request, res: Response) => {
 	});
 });
 
+const updateProfile = catchAsync(async (req: Request, res: Response) => {
+	const result = await AuthService.updateProfile(
+		req.user!.userId,
+		req.body,
+		req.file,
+	);
+
+	sendResponse(res, {
+		statusCode: httpStatus.OK,
+		success: true,
+		message: "Profile updated successfully.",
+		data: result,
+	});
+});
+
 const refreshToken = catchAsync(async (req: Request, res: Response) => {
 	const refreshToken = req.cookies?.refreshToken || req.body?.refreshToken;
 
@@ -100,6 +115,7 @@ export const AuthController = {
 	loginUser,
 	googleLogin,
 	getMe,
+	updateProfile,
 	refreshToken,
 	forgotPassword,
 	resetPassword,

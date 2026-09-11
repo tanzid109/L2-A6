@@ -5,6 +5,7 @@ import { Role } from "../../../generated/prisma/enums";
 import { AuthController } from "./auth.controller";
 import { validateRequest } from "../../middleware/validateRequest";
 import { UserValidation } from "./auth.validation";
+import { upload } from "../../lib/multer";
 
 const router = Router();
 
@@ -46,6 +47,14 @@ router.get(
   "/me",
   auth(Role.CUSTOMER, Role.TECHNICIAN, Role.ADMIN),
   AuthController.getMe,
+);
+
+router.patch(
+  "/profile",
+  auth(Role.CUSTOMER, Role.TECHNICIAN, Role.ADMIN),
+  upload.single("avatar"),
+  validateRequest(UserValidation.UpdateProfileSchema),
+  AuthController.updateProfile,
 );
 
 export const AuthRoutes = router;

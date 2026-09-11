@@ -17,11 +17,13 @@ import type {
   IRegisterUserPayload,
   IRequestUser,
   IResetPasswordPayload,
+  IUpdateProfilePayload,
   IVerifyEmailPayload,
 } from "./auth.interface";
 import crypto from "crypto";
 import { redisClient } from "../../lib/redis";
 import { transporter } from "../../lib/nodemailer";
+import { cloudinary } from "../../lib/cloudinary";
 import ejs from "ejs";
 import path from "path";
 
@@ -270,6 +272,53 @@ const getMe = async (user: IRequestUser) => {
   }
 
   return isUserExists;
+};
+
+const updateProfile = async (
+  userId: string,
+  payload: IUpdateProfilePayload,
+  file?: Express.Multer.File,
+) => {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+  });
+
+  if (!user) {
+    throw new Error("User not found");
+  }
+
+  let avatar = user.avatar;
+  let avatarPublicId = user.avatarPublicId;
+
+  if (file) {
+    const b64 = file.buffer.toString("base64");
+    const dataURI = `data:${file.mimetype};base64,${b64}`;
+
+    const uploaded = await cloudinary.uploader.upload(dataURI, {
+      folder: "fieldops/profiles",
+      resource_type: "image",
+    });
+
+    if (avatarPublicId) {
+      await cloudinary.uploader.destroy(avatarPublicId).catch(() => null);
+    }
+
+    avatar = uploaded.secure_url;
+    avatarPublicId = uploaded.public_id;
+  }
+
+  const updatedUser = await prisma.user.update({
+    where: { id: userId },
+    data: {
+      ...(payload.name !== undefined && { name: payload.name }),
+      ...(payload.phone !== undefined && { phone: payload.phone }),
+      ...(avatar !== undefined && { avatar }),
+      ...(avatarPublicId !== undefined && { avatarPublicId }),
+    },
+    omit: { password: true },
+  });
+
+  return updatedUser;
 };
 
 const refreshToken = async (token: string) => {
@@ -548,6 +597,7 @@ export const AuthService = {
   verifyCustomerEmail,
   loginUser,
   getMe,
+  updateProfile,
   refreshToken,
   googleLogin,
   forgotPassword,

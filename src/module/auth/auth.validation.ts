@@ -1,5 +1,10 @@
 import z from "zod";
 
+const UpdateProfileSchema = z.object({
+  name: z.string().min(2).max(100).optional(),
+  phone: z.string().min(6).max(20).optional(),
+});
+
 const CustomerRegistrationSchema = z.object({
   name: z.string(),
   email: z.email(),
@@ -60,4 +65,5 @@ export const UserValidation = {
   loginSchema,
   ForgotPasswordSchema,
   ResetPasswordSchema,
+  UpdateProfileSchema,
 };
