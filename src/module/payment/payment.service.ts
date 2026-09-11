@@ -10,7 +10,7 @@ import { Prisma } from "../../../generated/prisma/client";
 import httpStatus from "http-status";
 import { stripe } from "../../lib/stripe";
 import { PaymentQuery } from "./payment.interface";
-
+import config from "../../config";
 
 const createCheckoutSession = async (customerId: string, bookingId: string) => {
 	const booking = await prisma.booking.findUnique({
@@ -63,14 +63,9 @@ const createCheckoutSession = async (customerId: string, bookingId: string) => {
 	}
 
 	/*
-	 * Stripe amount is in smallest currency unit.
-	 *
-	 * For USD:
-	 * $50 = httpStatus.INTERNAL_SERVER_ERROR0 cents
+	 * Stripe amount is in the smallest currency unit (cents for USD).
 	 */
 	const stripeAmount = Math.round(amount * 100);
-
-	const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
 
 	const session = await stripe.checkout.sessions.create({
 		mode: "payment",
@@ -102,11 +97,17 @@ const createCheckoutSession = async (customerId: string, bookingId: string) => {
 			customerId: customerId,
 		},
 
-		success_url: `${frontendUrl}/payment/success?session_id={CHECKOUT_SESSION_ID}`,
+		client_reference_id: booking.id,
 
-		cancel_url: `${frontendUrl}/payment/cancel?bookingId=${booking.id}`,
+		success_url: `${config.frontend_url}/payment/success?session_id={CHECKOUT_SESSION_ID}`,
+
+		cancel_url: `${config.frontend_url}/payment/cancel?bookingId=${booking.id}`,
 	});
 
+	/*
+	 * Store the checkouts session id as the transactionId so the webhook
+	 * can always find the payment record, even without metadata.
+	 */
 	if (booking.payment) {
 		await prisma.payment.update({
 			where: {
@@ -114,6 +115,7 @@ const createCheckoutSession = async (customerId: string, bookingId: string) => {
 			},
 
 			data: {
+				transactionId: session.id,
 				method: PaymentMethod.STRIPE,
 				status: PaymentStatus.PENDING,
 				gatewayResponse: {
@@ -127,6 +129,8 @@ const createCheckoutSession = async (customerId: string, bookingId: string) => {
 				bookingId: booking.id,
 
 				amount: booking.totalAmount,
+
+				transactionId: session.id,
 
 				method: PaymentMethod.STRIPE,
 
@@ -146,6 +150,53 @@ const createCheckoutSession = async (customerId: string, bookingId: string) => {
 		amount,
 		currency: "USD",
 	};
+};
+
+const completePaymentInDB = async (
+	bookingId: string,
+	session: Stripe.Checkout.Session,
+) => {
+	const booking = await prisma.booking.findUnique({
+		where: {
+			id: bookingId,
+		},
+	});
+
+	if (!booking) {
+		throw new AppError(httpStatus.NOT_FOUND, "Booking not found");
+	}
+
+	const transactionId =
+		typeof session.payment_intent === "string"
+			? session.payment_intent
+			: session.id;
+
+	/*
+	 * Upsert keyed on the unique bookingId makes this idempotent:
+	 * duplicate/delayed webhook deliveries never throw and never double-write.
+	 */
+	const updated = await prisma.payment.upsert({
+		where: {
+			bookingId,
+		},
+		create: {
+			bookingId,
+			amount: booking.totalAmount,
+			method: PaymentMethod.STRIPE,
+			status: PaymentStatus.PAID,
+			transactionId,
+			paidAt: new Date(),
+			gatewayResponse: session as unknown as Prisma.InputJsonValue,
+		},
+		update: {
+			status: PaymentStatus.PAID,
+			transactionId,
+			paidAt: new Date(),
+			gatewayResponse: session as unknown as Prisma.InputJsonValue,
+		},
+	});
+
+	return updated;
 };
 
 const handleStripeWebhook = async (rawBody: Buffer, signature: string) => {
@@ -172,7 +223,23 @@ const handleStripeWebhook = async (rawBody: Buffer, signature: string) => {
 	if (event.type === "checkout.session.completed") {
 		const session = event.data.object as Stripe.Checkout.Session;
 
-		const bookingId = session.metadata?.bookingId;
+		let bookingId = session.metadata?.bookingId ?? session.client_reference_id;
+
+		if (!bookingId) {
+			/*
+			 * Fallback: find the payment row by the stored checkout session id.
+			 */
+			const payment = await prisma.payment.findFirst({
+				where: {
+					transactionId: session.id,
+				},
+				select: {
+					bookingId: true,
+				},
+			});
+
+			bookingId = payment?.bookingId ?? null;
+		}
 
 		if (!bookingId) {
 			throw new AppError(
@@ -181,66 +248,7 @@ const handleStripeWebhook = async (rawBody: Buffer, signature: string) => {
 			);
 		}
 
-		const transactionId =
-			typeof session.payment_intent === "string"
-				? session.payment_intent
-				: null;
-
-		await prisma.$transaction(async (tx) => {
-			const booking = await tx.booking.findUnique({
-				where: {
-					id: bookingId,
-				},
-
-				include: {
-					payment: true,
-				},
-			});
-
-			if (!booking) {
-				throw new AppError(httpStatus.NOT_FOUND, "Booking not found");
-			}
-
-			if (booking.payment?.status === PaymentStatus.PAID) {
-				return;
-			}
-
-			if (booking.payment) {
-				await tx.payment.update({
-					where: {
-						id: booking.payment.id,
-					},
-
-					data: {
-						status: PaymentStatus.PAID,
-
-						transactionId,
-
-						paidAt: new Date(),
-
-						gatewayResponse: session as unknown as Prisma.InputJsonValue,
-					},
-				});
-			} else {
-				await tx.payment.create({
-					data: {
-						bookingId,
-
-						amount: booking.totalAmount,
-
-						method: PaymentMethod.STRIPE,
-
-						status: PaymentStatus.PAID,
-
-						transactionId,
-
-						paidAt: new Date(),
-
-						gatewayResponse: session as unknown as Prisma.InputJsonValue,
-					},
-				});
-			}
-		});
+		await completePaymentInDB(bookingId, session);
 	}
 
 	if (event.type === "payment_intent.payment_failed") {

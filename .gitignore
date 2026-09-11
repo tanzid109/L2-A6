@@ -1,5 +1,7 @@
 node_modules
 .env
-/generated
+dist
+generated
+/generated/prisma
 .vercel
-fdg4uKVXSHf88CyF= Supa
+.vercel

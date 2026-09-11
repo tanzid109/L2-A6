@@ -18,17 +18,18 @@ import { ReviewRoutes } from './module/review/review.route'
 const app: Application = express()
 
 app.use(
-    cors({
-        origin: config.frontend_url,
-        credentials: true,
-    }),
-)
+  cors({
+    origin: [
+      "http://localhost:5000",
+      "https://fieldpro-backend-iota.vercel.app",
+    ],
+    credentials: true,
+  }),
+);
 
 // Enable URL-encoded form data parsing
 app.use(express.urlencoded({ extended: true }))
 
-// Stripe webhook must receive the raw body for signature verification,
-// so it is mounted BEFORE the global JSON body parser.
 app.post(
     '/api/v1/payments/webhook',
     express.raw({ type: 'application/json' }),
