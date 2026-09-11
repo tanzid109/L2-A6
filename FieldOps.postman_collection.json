@@ -223,6 +223,40 @@
             "description": "Requires Bearer token"
           },
           "response": []
+        },
+        {
+          "name": "Update Profile",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "name",
+                  "value": "John Doe",
+                  "type": "text"
+                },
+                {
+                  "key": "phone",
+                  "value": "+8801712345678",
+                  "type": "text"
+                },
+                {
+                  "key": "avatar",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/profile",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "profile"]
+            },
+            "description": "Requires Bearer token (any role). multipart/form-data: name, phone, avatar (optional image). All fields optional."
+          },
+          "response": []
         }
       ]
     },
@@ -1051,6 +1085,135 @@
               "path": ["api", "v1", "analytics", "technician"]
             },
             "description": "Requires TECHNICIAN role. Own availability slots, bookings breakdown, total earnings, rating."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Reviews",
+      "item": [
+        {
+          "name": "Create Review",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"bookingId\": \"booking-uuid\",\n  \"rating\": 5,\n  \"comment\": \"Excellent service!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/reviews",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "reviews"]
+            },
+            "description": "Requires CUSTOMER role. Booking must be COMPLETED and PAID. One review per booking."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Technician Reviews",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/reviews/technician/:technicianId?page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "reviews", "technician", ":technicianId"],
+              "variable": [
+                {
+                  "key": "technicianId",
+                  "value": "technician-profile-uuid"
+                }
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Page number"
+                },
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "description": "Items per page (max 100)"
+                }
+              ]
+            },
+            "description": "Public endpoint. Paginated reviews for a technician, ordered newest first."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Review By ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/reviews/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "reviews", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "review-uuid"
+                }
+              ]
+            },
+            "description": "Public endpoint. Returns a single review with booking, customer and technician info."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Review",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rating\": 4,\n  \"comment\": \"Good service but arrived a bit late.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/reviews/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "reviews", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "review-uuid"
+                }
+              ]
+            },
+            "description": "Requires CUSTOMER role. Can only update your own review. Both fields optional."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Review",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/reviews/:id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "reviews", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "review-uuid"
+                }
+              ]
+            },
+            "description": "Requires CUSTOMER role. Can only delete your own review. Technician rating is recalculated after deletion."
           },
           "response": []
         }
