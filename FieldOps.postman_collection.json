@@ -1,10 +1,41 @@
 {
   "info": {
-    "name": "FieldOps System Backend",
     "_postman_id": "fieldops-api-collection",
-    "description": "API Collection for FieldOps System Backend - Auth, Service, Technician, Availability, Booking & Payment modules",
+    "name": "FieldOps System Backend",
+    "description": "API collection for the FieldOps backend — Express 5 + Prisma 7 + PostgreSQL, with Redis-backed OTP auth, Cloudinary uploads and Stripe payments.\n\n**Getting started**\n1. Set `baseUrl` (default `http://localhost:5000`, matching `PORT` in `.env`).\n2. Run the collection-level pre-request script once — it generates `{{futureDate}}`, `{{futureDateIso}}` and `{{stripeSignature}}` for you.\n3. Hit Login. The test scripts decode the JWT and fill in `{{accessToken}}` plus the role-scoped `{{adminAccessToken}}` / `{{technicianAccessToken}}` / `{{customerAccessToken}}`, so switch roles by logging in as that role.\n4. IDs are chained automatically: Get All Services sets `{{serviceId}}`, Get All Technicians sets `{{technicianId}}`, Create Availability sets `{{availabilityId}}`, Create Booking sets `{{bookingId}}`, and so on. The booking, payment and review flows each need their matching role token.\n\n**Conventions**\n- Every response uses the envelope `{ success, statusCode, message, data, meta? }`; paginated endpoints add `meta: { page, limit, total, totalPages }`.\n- `Content-Type: application/json` on JSON bodies. Endpoints with file uploads use multipart/form-data, so they deliberately carry no `Content-Type` header — Postman sets the boundary itself.\n- Query filters that look boolean (`isActive`, `isBooked`, `isAvailable`) are validated as the **strings** `\"true\"` / `\"false\"`, while `isActive` in an Update Service body is a real boolean.\n\n**Known behaviour**\n`globalErrorHandler` computes a `statusCode` but always responds with HTTP 500, so auth failures, role violations, Zod validation failures and `AppError`s such as 404 / 409 all arrive as 500 with the real reason in `message` (in `NODE_ENV=development`). The one exception is unmatched routes, which return a genuine 404. Assertions here check for success rather than specific error codes.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{accessToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Keep date-based example payloads valid: availability rejects past dates.",
+          "const future = new Date();",
+          "future.setDate(future.getDate() + 3);",
+          "pm.collectionVariables.set(\"futureDate\", future.toISOString().slice(0, 10));",
+          "pm.collectionVariables.set(\"futureDateIso\", future.toISOString());",
+          "",
+          "// Stripe webhook signature header placeholder.",
+          "// Replace with the real header from `stripe listen`, or run:",
+          "// stripe listen --forward-to localhost:5000/api/v1/payments/webhook",
+          "const t = Math.floor(Date.now() / 1000);",
+          "pm.collectionVariables.set(\"stripeSignature\", \"t=\" + t + \",v1=replace-with-real-signature\");"
+        ]
+      }
+    }
+  ],
   "variable": [
     {
       "key": "baseUrl",
@@ -20,110 +51,272 @@
       "key": "refreshToken",
       "value": "",
       "type": "string"
+    },
+    {
+      "key": "adminAccessToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "technicianAccessToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "customerAccessToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "userId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "userRole",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "serviceId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "technicianId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "availabilityId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "bookingId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "paymentId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "reviewId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "sessionId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "checkoutUrl",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "testEmail",
+      "value": "john@example.com",
+      "type": "string"
+    },
+    {
+      "key": "password",
+      "value": "Password1!",
+      "type": "string"
+    },
+    {
+      "key": "newPassword",
+      "value": "NewPassword2@",
+      "type": "string"
+    },
+    {
+      "key": "otp",
+      "value": "",
+      "type": "string",
+      "description": "6-digit OTP from the email. Expires after 5 minutes."
+    },
+    {
+      "key": "futureDate",
+      "value": "",
+      "type": "string",
+      "description": "Generated: YYYY-MM-DD, 3 days out."
+    },
+    {
+      "key": "futureDateIso",
+      "value": "",
+      "type": "string",
+      "description": "Generated: full ISO datetime, 3 days out."
+    },
+    {
+      "key": "stripeSignature",
+      "value": "",
+      "type": "string",
+      "description": "Generated placeholder. Replace with the real Stripe signature header."
     }
   ],
-  "auth": {
-    "type": "bearer",
-    "bearer": [
-      {
-        "key": "token",
-        "value": "{{accessToken}}",
-        "type": "string"
-      }
-    ]
-  },
   "item": [
     {
-      "name": "Auth",
+      "name": "Health",
+      "description": "Liveness probe for the Express app. No auth required.",
       "item": [
         {
-          "name": "Register Customer",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": \"John Doe\",\n  \"email\": \"john@example.com\",\n  \"password\": \"Password1!\",\n  \"phone\": \"+8801712345678\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/auth/register",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "auth", "register"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Verify Email",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"email\": \"john@example.com\",\n  \"otp\": \"123456\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/auth/verify-email",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "auth", "verify-email"]
-            }
-          },
-          "response": []
-        },
-        {
-          "name": "Login",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"email\": \"john@example.com\",\n  \"password\": \"Password1!\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/auth/login",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "auth", "login"]
-            },
-            "description": "Login and save tokens to variables"
-          },
+          "name": "API Root",
           "event": [
             {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "var jsonData = pm.response.json();",
-                  "if (jsonData.success && jsonData.data) {",
-                  "    if (jsonData.data.accessToken) {",
-                  "        pm.collectionVariables.set('accessToken', jsonData.data.accessToken);",
-                  "    }",
-                  "    if (jsonData.data.refreshToken) {",
-                  "        pm.collectionVariables.set('refreshToken', jsonData.data.refreshToken);",
-                  "    }",
-                  "}"
+                  "// ---- FieldOps shared assertions + variable capture ----",
+                  "function decodeJwt(token) {\n    try {\n        var part = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');\n        while (part.length % 4) { part += '='; }\n        return JSON.parse(decodeURIComponent(escape(atob(part))));\n    } catch (e) {\n        return null;\n    }\n}\n\nfunction captureToken(token, key) {\n  if (!token) return;\n  pm.collectionVariables.set(key, token);\n  const payload = decodeJwt(token);\n  if (!payload) return;\n  if (payload.userId) pm.collectionVariables.set('userId', payload.userId);\n  if (payload.role) pm.collectionVariables.set('userRole', payload.role);\n  if (payload.role === 'ADMIN') pm.collectionVariables.set('adminAccessToken', token);\n  if (payload.role === 'TECHNICIAN') pm.collectionVariables.set('technicianAccessToken', token);\n  if (payload.role === 'CUSTOMER') pm.collectionVariables.set('customerAccessToken', token);\n}",
+                  "",
+                  "const body = pm.response.json();",
+                  "",
+                  "pm.test(\"Response status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Envelope success is true\", function () {",
+                  "    pm.expect(body.success, \"success\").to.be.true;",
+                  "});",
+                  "",
+                  "pm.test(\"Welcome message present\", function () {",
+                  "    pm.expect(body.message).to.eql(\"Welcome to FieldOps System Backend\");",
+                  "});"
                 ]
               }
             }
           ],
-          "response": []
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "noauth"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "/"
+              ]
+            },
+            "description": "Basic route registered in `src/app.ts`. Confirms the server is up and reachable."
+          },
+          "response": [
+            {
+              "name": "Success",
+              "originalRequest": {},
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": true,\n  \"message\": \"Welcome to FieldOps System Backend\"\n}"
+            }
+          ]
         },
         {
-          "name": "Google Login",
+          "name": "Unknown Route (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "",
+                  "pm.test(\"Status is 404\", function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});",
+                  "",
+                  "pm.test(\"Not found message\", function () {",
+                  "    pm.expect(body.message).to.eql(\"Route not found\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "noauth"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/does-not-exist",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "does-not-exist"
+              ]
+            },
+            "description": "Any unmatched path falls through to `notFound` middleware and returns 404. Useful for checking that a route you expect really does not exist.\n\nNote: unlike other failures, the 404 handler responds with the real HTTP 404 status."
+          },
+          "response": [
+            {
+              "name": "Not Found",
+              "originalRequest": {},
+              "status": "Not Found",
+              "code": 404,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"message\": \"Route not found\",\n  \"path\": \"/api/v1/does-not-exist\",\n  \"date\": \"2026-01-01T00:00:00.000Z\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "description": "Public auth endpoints under `/api/v1/auth`. Registration and password reset send 6-digit OTPs by email (stored in Redis for 5 minutes) — paste the OTP into `{{otp}}` before running the verification step.\n\nThe login-style requests decode the returned JWT and store `userId`, `userRole` and the role-scoped `adminAccessToken` / `technicianAccessToken` / `customerAccessToken`.",
+      "item": [
+        {
+          "name": "Register Customer",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// ---- FieldOps shared assertions + variable capture ----",
+                  "function decodeJwt(token) {\n    try {\n        var part = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');\n        while (part.length % 4) { part += '='; }\n        return JSON.parse(decodeURIComponent(escape(atob(part))));\n    } catch (e) {\n        return null;\n    }\n}\n\nfunction captureToken(token, key) {\n  if (!token) return;\n  pm.collectionVariables.set(key, token);\n  const payload = decodeJwt(token);\n  if (!payload) return;\n  if (payload.userId) pm.collectionVariables.set('userId', payload.userId);\n  if (payload.role) pm.collectionVariables.set('userRole', payload.role);\n  if (payload.role === 'ADMIN') pm.collectionVariables.set('adminAccessToken', token);\n  if (payload.role === 'TECHNICIAN') pm.collectionVariables.set('technicianAccessToken', token);\n  if (payload.role === 'CUSTOMER') pm.collectionVariables.set('customerAccessToken', token);\n}",
+                  "",
+                  "const body = pm.response.json();",
+                  "",
+                  "pm.test(\"Response status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Envelope success is true\", function () {",
+                  "    pm.expect(body.success, \"success\").to.be.true;",
+                  "});",
+                  "",
+                  "pm.test(\"Registration message\", function () {",
+                  "    pm.expect(body.message).to.match(/Registration successful/i);",
+                  "});"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -132,20 +325,258 @@
                 "value": "application/json"
               }
             ],
+            "auth": {
+              "type": "noauth"
+            },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"idToken\": \"google-id-token-from-client\"\n}"
+              "raw": "{\n  \"name\": \"John Doe\",\n  \"email\": \"{{testEmail}}\",\n  \"password\": \"{{password}}\",\n  \"phone\": \"+8801712345678\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "register"
+              ]
+            },
+            "description": "Creates a pending registration and emails a 6-digit OTP. Password rules: min 8 chars, at least one uppercase, one lowercase, one number and one special character. `phone` is optional.\n\nRe-running with the same email fails until the account exists — use a fresh email or reset with Forgot Password."
+          },
+          "response": []
+        },
+        {
+          "name": "Verify Email",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// ---- FieldOps shared assertions + variable capture ----",
+                  "function decodeJwt(token) {\n    try {\n        var part = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');\n        while (part.length % 4) { part += '='; }\n        return JSON.parse(decodeURIComponent(escape(atob(part))));\n    } catch (e) {\n        return null;\n    }\n}\n\nfunction captureToken(token, key) {\n  if (!token) return;\n  pm.collectionVariables.set(key, token);\n  const payload = decodeJwt(token);\n  if (!payload) return;\n  if (payload.userId) pm.collectionVariables.set('userId', payload.userId);\n  if (payload.role) pm.collectionVariables.set('userRole', payload.role);\n  if (payload.role === 'ADMIN') pm.collectionVariables.set('adminAccessToken', token);\n  if (payload.role === 'TECHNICIAN') pm.collectionVariables.set('technicianAccessToken', token);\n  if (payload.role === 'CUSTOMER') pm.collectionVariables.set('customerAccessToken', token);\n}",
+                  "",
+                  "const body = pm.response.json();",
+                  "",
+                  "pm.test(\"Response status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Envelope success is true\", function () {",
+                  "    pm.expect(body.success, \"success\").to.be.true;",
+                  "});",
+                  "",
+                  "const data = body.data || {};",
+                  "if (data.user && data.user.id) pm.collectionVariables.set(\"userId\", data.user.id);",
+                  "captureToken(data.accessToken, \"accessToken\");",
+                  "captureToken(data.refreshToken, \"refreshToken\");"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{testEmail}}\",\n  \"otp\": \"{{otp}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/verify-email",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "verify-email"
+              ]
+            },
+            "description": "Verifies the emailed OTP, creates the user, sends the welcome email and returns the user plus both tokens. Captures `accessToken`, `refreshToken`, `userId` and the role-scoped tokens."
+          },
+          "response": []
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// ---- FieldOps shared assertions + variable capture ----",
+                  "function decodeJwt(token) {\n    try {\n        var part = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');\n        while (part.length % 4) { part += '='; }\n        return JSON.parse(decodeURIComponent(escape(atob(part))));\n    } catch (e) {\n        return null;\n    }\n}\n\nfunction captureToken(token, key) {\n  if (!token) return;\n  pm.collectionVariables.set(key, token);\n  const payload = decodeJwt(token);\n  if (!payload) return;\n  if (payload.userId) pm.collectionVariables.set('userId', payload.userId);\n  if (payload.role) pm.collectionVariables.set('userRole', payload.role);\n  if (payload.role === 'ADMIN') pm.collectionVariables.set('adminAccessToken', token);\n  if (payload.role === 'TECHNICIAN') pm.collectionVariables.set('technicianAccessToken', token);\n  if (payload.role === 'CUSTOMER') pm.collectionVariables.set('customerAccessToken', token);\n}",
+                  "",
+                  "const body = pm.response.json();",
+                  "",
+                  "pm.test(\"Response status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Envelope success is true\", function () {",
+                  "    pm.expect(body.success, \"success\").to.be.true;",
+                  "});",
+                  "",
+                  "const data = body.data || {};",
+                  "if (data.user && data.user.id) pm.collectionVariables.set(\"userId\", data.user.id);",
+                  "captureToken(data.accessToken, \"accessToken\");",
+                  "captureToken(data.refreshToken, \"refreshToken\");"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{testEmail}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Credential login. Same password rules as registration are enforced on the payload.\n\nServer seeds an ADMIN, a TECHNICIAN and a CUSTOMER on boot — their emails and passwords come from `ADMIN_EMAIL` / `TECHNICIAN_EMAIL` / `CUSTOMER_EMAIL` in `.env`. Log in as each role when you need to hit role-guarded endpoints."
+          },
+          "response": []
+        },
+        {
+          "name": "Google Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// ---- FieldOps shared assertions + variable capture ----",
+                  "function decodeJwt(token) {\n    try {\n        var part = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');\n        while (part.length % 4) { part += '='; }\n        return JSON.parse(decodeURIComponent(escape(atob(part))));\n    } catch (e) {\n        return null;\n    }\n}\n\nfunction captureToken(token, key) {\n  if (!token) return;\n  pm.collectionVariables.set(key, token);\n  const payload = decodeJwt(token);\n  if (!payload) return;\n  if (payload.userId) pm.collectionVariables.set('userId', payload.userId);\n  if (payload.role) pm.collectionVariables.set('userRole', payload.role);\n  if (payload.role === 'ADMIN') pm.collectionVariables.set('adminAccessToken', token);\n  if (payload.role === 'TECHNICIAN') pm.collectionVariables.set('technicianAccessToken', token);\n  if (payload.role === 'CUSTOMER') pm.collectionVariables.set('customerAccessToken', token);\n}",
+                  "",
+                  "const body = pm.response.json();",
+                  "",
+                  "pm.test(\"Response status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Envelope success is true\", function () {",
+                  "    pm.expect(body.success, \"success\").to.be.true;",
+                  "});",
+                  "",
+                  "const data = body.data || {};",
+                  "if (data.user && data.user.id) pm.collectionVariables.set(\"userId\", data.user.id);",
+                  "captureToken(data.accessToken, \"accessToken\");",
+                  "captureToken(data.refreshToken, \"refreshToken\");"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"idToken\": \"GOOGLE_ID_TOKEN\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/auth/google-login",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "auth", "google-login"]
-            }
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "google-login"
+              ]
+            },
+            "description": "Exchanges a Google ID token for API tokens, creating the user on first sign-in. `idToken` must be issued for the `GOOGLE_CLIENT_ID` in `.env`, and the token must carry both `email` and `name` claims.\n\nNo Zod validation on this route — an unverifiable token throws \"Invalid Or Expired Google Id Token\"."
           },
           "response": []
         },
         {
           "name": "Refresh Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// ---- FieldOps shared assertions + variable capture ----",
+                  "function decodeJwt(token) {\n    try {\n        var part = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');\n        while (part.length % 4) { part += '='; }\n        return JSON.parse(decodeURIComponent(escape(atob(part))));\n    } catch (e) {\n        return null;\n    }\n}\n\nfunction captureToken(token, key) {\n  if (!token) return;\n  pm.collectionVariables.set(key, token);\n  const payload = decodeJwt(token);\n  if (!payload) return;\n  if (payload.userId) pm.collectionVariables.set('userId', payload.userId);\n  if (payload.role) pm.collectionVariables.set('userRole', payload.role);\n  if (payload.role === 'ADMIN') pm.collectionVariables.set('adminAccessToken', token);\n  if (payload.role === 'TECHNICIAN') pm.collectionVariables.set('technicianAccessToken', token);\n  if (payload.role === 'CUSTOMER') pm.collectionVariables.set('customerAccessToken', token);\n}",
+                  "",
+                  "const body = pm.response.json();",
+                  "",
+                  "pm.test(\"Response status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Envelope success is true\", function () {",
+                  "    pm.expect(body.success, \"success\").to.be.true;",
+                  "});",
+                  "",
+                  "const data = body.data || {};",
+                  "if (data.user && data.user.id) pm.collectionVariables.set(\"userId\", data.user.id);",
+                  "captureToken(data.accessToken, \"accessToken\");",
+                  "captureToken(data.refreshToken, \"refreshToken\");"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -154,20 +585,62 @@
                 "value": "application/json"
               }
             ],
+            "auth": {
+              "type": "noauth"
+            },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/auth/refresh-token",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "auth", "refresh-token"]
-            }
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "refresh-token"
+              ]
+            },
+            "description": "Rotates the pair: returns a fresh access token and refresh token. The refresh token is read from the `refreshToken` cookie if present, otherwise from the body — this request sends it in the body.\n\nThe user must still exist and be `ACTIVE`.\n\nNote: the server does not currently set cookies itself, so the body field is what actually gets used here."
           },
           "response": []
         },
         {
           "name": "Forgot Password",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// ---- FieldOps shared assertions + variable capture ----",
+                  "function decodeJwt(token) {\n    try {\n        var part = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');\n        while (part.length % 4) { part += '='; }\n        return JSON.parse(decodeURIComponent(escape(atob(part))));\n    } catch (e) {\n        return null;\n    }\n}\n\nfunction captureToken(token, key) {\n  if (!token) return;\n  pm.collectionVariables.set(key, token);\n  const payload = decodeJwt(token);\n  if (!payload) return;\n  if (payload.userId) pm.collectionVariables.set('userId', payload.userId);\n  if (payload.role) pm.collectionVariables.set('userRole', payload.role);\n  if (payload.role === 'ADMIN') pm.collectionVariables.set('adminAccessToken', token);\n  if (payload.role === 'TECHNICIAN') pm.collectionVariables.set('technicianAccessToken', token);\n  if (payload.role === 'CUSTOMER') pm.collectionVariables.set('customerAccessToken', token);\n}",
+                  "",
+                  "const body = pm.response.json();",
+                  "",
+                  "pm.test(\"Response status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Envelope success is true\", function () {",
+                  "    pm.expect(body.success, \"success\").to.be.true;",
+                  "});",
+                  "",
+                  "pm.test(\"OTP email dispatched\", function () {",
+                  "    pm.expect(body.message).to.match(/OTP sent/i);",
+                  "});"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -176,20 +649,62 @@
                 "value": "application/json"
               }
             ],
+            "auth": {
+              "type": "noauth"
+            },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"john@example.com\"\n}"
+              "raw": "{\n  \"email\": \"{{testEmail}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/auth/forgot-password",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "auth", "forgot-password"]
-            }
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "forgot-password"
+              ]
+            },
+            "description": "Emails a password-reset OTP (5 minute TTL in Redis). Only available for `CREDENTIAL` accounts — Google-only accounts get \"User has account with google\". Banned users are rejected."
           },
           "response": []
         },
         {
           "name": "Reset Password",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// ---- FieldOps shared assertions + variable capture ----",
+                  "function decodeJwt(token) {\n    try {\n        var part = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');\n        while (part.length % 4) { part += '='; }\n        return JSON.parse(decodeURIComponent(escape(atob(part))));\n    } catch (e) {\n        return null;\n    }\n}\n\nfunction captureToken(token, key) {\n  if (!token) return;\n  pm.collectionVariables.set(key, token);\n  const payload = decodeJwt(token);\n  if (!payload) return;\n  if (payload.userId) pm.collectionVariables.set('userId', payload.userId);\n  if (payload.role) pm.collectionVariables.set('userRole', payload.role);\n  if (payload.role === 'ADMIN') pm.collectionVariables.set('adminAccessToken', token);\n  if (payload.role === 'TECHNICIAN') pm.collectionVariables.set('technicianAccessToken', token);\n  if (payload.role === 'CUSTOMER') pm.collectionVariables.set('customerAccessToken', token);\n}",
+                  "",
+                  "const body = pm.response.json();",
+                  "",
+                  "pm.test(\"Response status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Envelope success is true\", function () {",
+                  "    pm.expect(body.success, \"success\").to.be.true;",
+                  "});",
+                  "",
+                  "pm.test(\"Password reset\", function () {",
+                  "    pm.expect(body.message).to.match(/reset/i);",
+                  "});"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -198,63 +713,167 @@
                 "value": "application/json"
               }
             ],
+            "auth": {
+              "type": "noauth"
+            },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"john@example.com\",\n  \"otp\": \"123456\",\n  \"newPassword\": \"NewPassword1!\"\n}"
+              "raw": "{\n  \"email\": \"{{testEmail}}\",\n  \"newPassword\": \"{{newPassword}}\",\n  \"otp\": \"{{otp}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/auth/reset-password",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "auth", "reset-password"]
-            }
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "reset-password"
+              ]
+            },
+            "description": "Consumes the OTP from Forgot Password and sets the new password (hashed with bcrypt). `newPassword` follows the same complexity rules as registration.\n\nUpdate `{{password}}` after this so later Login requests keep working."
           },
           "response": []
         },
         {
           "name": "Get Me",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// ---- FieldOps shared assertions + variable capture ----",
+                  "function decodeJwt(token) {\n    try {\n        var part = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');\n        while (part.length % 4) { part += '='; }\n        return JSON.parse(decodeURIComponent(escape(atob(part))));\n    } catch (e) {\n        return null;\n    }\n}\n\nfunction captureToken(token, key) {\n  if (!token) return;\n  pm.collectionVariables.set(key, token);\n  const payload = decodeJwt(token);\n  if (!payload) return;\n  if (payload.userId) pm.collectionVariables.set('userId', payload.userId);\n  if (payload.role) pm.collectionVariables.set('userRole', payload.role);\n  if (payload.role === 'ADMIN') pm.collectionVariables.set('adminAccessToken', token);\n  if (payload.role === 'TECHNICIAN') pm.collectionVariables.set('technicianAccessToken', token);\n  if (payload.role === 'CUSTOMER') pm.collectionVariables.set('customerAccessToken', token);\n}",
+                  "",
+                  "const body = pm.response.json();",
+                  "",
+                  "pm.test(\"Response status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Envelope success is true\", function () {",
+                  "    pm.expect(body.success, \"success\").to.be.true;",
+                  "});",
+                  "",
+                  "if (body.data && body.data.id) pm.collectionVariables.set(\"userId\", body.data.id);",
+                  "if (body.data && body.data.role) pm.collectionVariables.set(\"userRole\", body.data.role);"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
             "header": [],
+            "auth": {
+              "type": "inherit"
+            },
             "url": {
               "raw": "{{baseUrl}}/api/v1/auth/me",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "auth", "me"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "me"
+              ]
             },
-            "description": "Requires Bearer token"
+            "description": "Requires `CUSTOMER`, `TECHNICIAN` or `ADMIN` — any authenticated caller. `password` is omitted. Captures `userId` from the response.\n\nThe auth middleware matches the JWT against the database on `id` + `email` + `name` + `role`, so changing your name or email invalidates tokens issued before the change."
           },
-          "response": []
+          "response": [
+            {
+              "name": "Success",
+              "originalRequest": {},
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": true,\n  \"statusCode\": 200,\n  \"message\": \"User information retrieved successfully.\",\n  \"data\": {\n    \"id\": \"9c1f0f1e-0a1b-4c2d-8e3f-1a2b3c4d5e6f\",\n    \"name\": \"John Doe\",\n    \"email\": \"john@example.com\",\n    \"role\": \"CUSTOMER\",\n    \"phone\": \"+8801712345678\",\n    \"avatar\": \"https://res.cloudinary.com/demo/image/upload/v1/fieldops/avatar.jpg\",\n    \"avatarPublicId\": \"fieldops/avatar\",\n    \"status\": \"ACTIVE\",\n    \"emailVerified\": true,\n    \"googleId\": null,\n    \"authProvider\": \"CREDENTIAL\",\n    \"createdAt\": \"2026-01-01T00:00:00.000Z\",\n    \"updatedAt\": \"2026-01-01T00:00:00.000Z\"\n  }\n}"
+            }
+          ]
         },
         {
           "name": "Update Profile",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// ---- FieldOps shared assertions + variable capture ----",
+                  "function decodeJwt(token) {\n    try {\n        var part = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');\n        while (part.length % 4) { part += '='; }\n        return JSON.parse(decodeURIComponent(escape(atob(part))));\n    } catch (e) {\n        return null;\n    }\n}\n\nfunction captureToken(token, key) {\n  if (!token) return;\n  pm.collectionVariables.set(key, token);\n  const payload = decodeJwt(token);\n  if (!payload) return;\n  if (payload.userId) pm.collectionVariables.set('userId', payload.userId);\n  if (payload.role) pm.collectionVariables.set('userRole', payload.role);\n  if (payload.role === 'ADMIN') pm.collectionVariables.set('adminAccessToken', token);\n  if (payload.role === 'TECHNICIAN') pm.collectionVariables.set('technicianAccessToken', token);\n  if (payload.role === 'CUSTOMER') pm.collectionVariables.set('customerAccessToken', token);\n}",
+                  "",
+                  "const body = pm.response.json();",
+                  "",
+                  "pm.test(\"Response status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Envelope success is true\", function () {",
+                  "    pm.expect(body.success, \"success\").to.be.true;",
+                  "});",
+                  "",
+                  "if (body.data && body.data.id) pm.collectionVariables.set(\"userId\", body.data.id);"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "PATCH",
             "header": [],
+            "auth": {
+              "type": "inherit"
+            },
             "body": {
               "mode": "formdata",
               "formdata": [
                 {
                   "key": "name",
-                  "value": "John Doe",
-                  "type": "text"
+                  "value": "John Doe Updated",
+                  "type": "text",
+                  "description": "Optional. 2-100 characters."
                 },
                 {
                   "key": "phone",
                   "value": "+8801712345678",
-                  "type": "text"
+                  "type": "text",
+                  "description": "Optional. 6-20 characters."
                 },
                 {
                   "key": "avatar",
                   "type": "file",
-                  "src": []
+                  "src": [],
+                  "description": "Optional image file."
                 }
               ]
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/auth/profile",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "auth", "profile"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "profile"
+              ]
             },
-            "description": "Requires Bearer token (any role). multipart/form-data: name, phone, avatar (optional image). All fields optional."
+            "description": "Requires `CUSTOMER`, `TECHNICIAN` or `ADMIN`.\n\nmultipart/form-data. `name` (2-100 chars) and `phone` (6-20 chars) are optional; `avatar` is an optional image uploaded to Cloudinary. Uploading a new avatar deletes the previous Cloudinary asset.\n\nChanging `name` invalidates your current access token because the middleware matches the JWT name against the stored user."
           },
           "response": []
         }
@@ -262,182 +881,428 @@
     },
     {
       "name": "Services",
+      "description": "Catalog endpoints under `/api/v1/services`. Reads are public; writes require `ADMIN`. Service deletion is a soft delete (`isActive = false`) and also removes the image from Cloudinary.",
       "item": [
         {
           "name": "Get All Services",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// ---- FieldOps shared assertions + variable capture ----",
+                  "function decodeJwt(token) {\n    try {\n        var part = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');\n        while (part.length % 4) { part += '='; }\n        return JSON.parse(decodeURIComponent(escape(atob(part))));\n    } catch (e) {\n        return null;\n    }\n}\n\nfunction captureToken(token, key) {\n  if (!token) return;\n  pm.collectionVariables.set(key, token);\n  const payload = decodeJwt(token);\n  if (!payload) return;\n  if (payload.userId) pm.collectionVariables.set('userId', payload.userId);\n  if (payload.role) pm.collectionVariables.set('userRole', payload.role);\n  if (payload.role === 'ADMIN') pm.collectionVariables.set('adminAccessToken', token);\n  if (payload.role === 'TECHNICIAN') pm.collectionVariables.set('technicianAccessToken', token);\n  if (payload.role === 'CUSTOMER') pm.collectionVariables.set('customerAccessToken', token);\n}",
+                  "",
+                  "const body = pm.response.json();",
+                  "",
+                  "pm.test(\"Response status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Envelope success is true\", function () {",
+                  "    pm.expect(body.success, \"success\").to.be.true;",
+                  "});",
+                  "",
+                  "const rows = Array.isArray(body.data) ? body.data : [];",
+                  "if (rows.length && rows[0].id) pm.collectionVariables.set(\"serviceId\", rows[0].id);"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
             "header": [],
+            "auth": {
+              "type": "noauth"
+            },
             "url": {
               "raw": "{{baseUrl}}/api/v1/services?search=&category=&isActive=&page=1&limit=10",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "services"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "services"
+              ],
               "query": [
                 {
                   "key": "search",
                   "value": "",
-                  "description": "Search in title and description"
+                  "description": "Matches title or description.",
+                  "disabled": false
                 },
                 {
                   "key": "category",
                   "value": "",
-                  "description": "Filter by category"
+                  "description": "Exact category match.",
+                  "disabled": false
                 },
                 {
                   "key": "isActive",
                   "value": "",
-                  "description": "Filter by active status (true/false)"
+                  "description": "\"true\" or \"false\" only — anything else fails validation.",
+                  "disabled": false
                 },
                 {
                   "key": "page",
                   "value": "1",
-                  "description": "Page number"
+                  "description": "Positive integer, default 1.",
+                  "disabled": false
                 },
                 {
                   "key": "limit",
                   "value": "10",
-                  "description": "Items per page (max 100)"
+                  "description": "Positive integer, max 100, default 10.",
+                  "disabled": false
                 }
               ]
-            }
+            },
+            "description": "Public, paginated list. Query is validated with Zod: `page` and `limit` are coerced to numbers, and `limit` is capped at 100. Pagination metadata comes back under `meta`.\n\nCaptures the first result id into `{{serviceId}}` so the requests below have something to work with."
           },
-          "response": []
+          "response": [
+            {
+              "name": "Success",
+              "originalRequest": {},
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": true,\n  \"statusCode\": 200,\n  \"message\": \"Services retrieved successfully\",\n  \"data\": [\n    {\n      \"id\": \"1f2e3d4c-5b6a-4788-9900-aabbccddeeff\",\n      \"title\": \"AC Repair Service\",\n      \"slug\": \"ac-repair-service\",\n      \"description\": \"Professional AC repair and maintenance for residential and commercial properties.\",\n      \"category\": \"HVAC\",\n      \"price\": \"1500.00\",\n      \"duration\": 120,\n      \"imageUrl\": \"https://res.cloudinary.com/demo/image/upload/v1/fieldops/ac-repair.jpg\",\n      \"imagePublicId\": \"fieldops/ac-repair\",\n      \"isActive\": true,\n      \"createdAt\": \"2026-01-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-01-01T00:00:00.000Z\"\n    }\n  ],\n  \"meta\": {\n    \"page\": 1,\n    \"limit\": 10,\n    \"total\": 1,\n    \"totalPages\": 1\n  }\n}"
+            }
+          ]
         },
         {
           "name": "Get Service By ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// ---- FieldOps shared assertions + variable capture ----",
+                  "function decodeJwt(token) {\n    try {\n        var part = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');\n        while (part.length % 4) { part += '='; }\n        return JSON.parse(decodeURIComponent(escape(atob(part))));\n    } catch (e) {\n        return null;\n    }\n}\n\nfunction captureToken(token, key) {\n  if (!token) return;\n  pm.collectionVariables.set(key, token);\n  const payload = decodeJwt(token);\n  if (!payload) return;\n  if (payload.userId) pm.collectionVariables.set('userId', payload.userId);\n  if (payload.role) pm.collectionVariables.set('userRole', payload.role);\n  if (payload.role === 'ADMIN') pm.collectionVariables.set('adminAccessToken', token);\n  if (payload.role === 'TECHNICIAN') pm.collectionVariables.set('technicianAccessToken', token);\n  if (payload.role === 'CUSTOMER') pm.collectionVariables.set('customerAccessToken', token);\n}",
+                  "",
+                  "const body = pm.response.json();",
+                  "",
+                  "pm.test(\"Response status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Envelope success is true\", function () {",
+                  "    pm.expect(body.success, \"success\").to.be.true;",
+                  "});",
+                  "",
+                  "if (body.data && body.data.id) pm.collectionVariables.set(\"serviceId\", body.data.id);"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
             "header": [],
+            "auth": {
+              "type": "noauth"
+            },
             "url": {
               "raw": "{{baseUrl}}/api/v1/services/:id",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "services", ":id"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "services",
+                ":id"
+              ],
               "variable": [
                 {
                   "key": "id",
-                  "value": "service-uuid-here"
+                  "value": "{{serviceId}}",
+                  "type": "string"
                 }
               ]
-            }
+            },
+            "description": "Public lookup of a single service by id."
           },
           "response": []
         },
         {
           "name": "Create Service",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// ---- FieldOps shared assertions + variable capture ----",
+                  "function decodeJwt(token) {\n    try {\n        var part = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');\n        while (part.length % 4) { part += '='; }\n        return JSON.parse(decodeURIComponent(escape(atob(part))));\n    } catch (e) {\n        return null;\n    }\n}\n\nfunction captureToken(token, key) {\n  if (!token) return;\n  pm.collectionVariables.set(key, token);\n  const payload = decodeJwt(token);\n  if (!payload) return;\n  if (payload.userId) pm.collectionVariables.set('userId', payload.userId);\n  if (payload.role) pm.collectionVariables.set('userRole', payload.role);\n  if (payload.role === 'ADMIN') pm.collectionVariables.set('adminAccessToken', token);\n  if (payload.role === 'TECHNICIAN') pm.collectionVariables.set('technicianAccessToken', token);\n  if (payload.role === 'CUSTOMER') pm.collectionVariables.set('customerAccessToken', token);\n}",
+                  "",
+                  "const body = pm.response.json();",
+                  "",
+                  "pm.test(\"Response status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Envelope success is true\", function () {",
+                  "    pm.expect(body.success, \"success\").to.be.true;",
+                  "});",
+                  "",
+                  "if (body.data && body.data.id) pm.collectionVariables.set(\"serviceId\", body.data.id);"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [],
+            "auth": {
+              "type": "inherit"
+            },
             "body": {
               "mode": "formdata",
               "formdata": [
                 {
                   "key": "title",
                   "value": "AC Repair Service",
-                  "type": "text"
+                  "type": "text",
+                  "description": "Required. 3-100 characters."
                 },
                 {
                   "key": "slug",
                   "value": "ac-repair-service",
-                  "type": "text"
+                  "type": "text",
+                  "description": "Required. Unique, lowercase letters/numbers/hyphens only."
                 },
                 {
                   "key": "description",
-                  "value": "Professional AC repair and maintenance service for residential and commercial properties",
-                  "type": "text"
+                  "value": "Professional AC repair and maintenance for residential and commercial properties.",
+                  "type": "text",
+                  "description": "Required. Minimum 10 characters."
                 },
                 {
                   "key": "category",
                   "value": "HVAC",
-                  "type": "text"
+                  "type": "text",
+                  "description": "Required. Minimum 2 characters."
                 },
                 {
                   "key": "price",
                   "value": "1500",
-                  "type": "text"
+                  "type": "text",
+                  "description": "Required. Number greater than 0."
                 },
                 {
                   "key": "duration",
                   "value": "120",
-                  "type": "text"
+                  "type": "text",
+                  "description": "Required. Positive integer (minutes)."
                 },
                 {
                   "key": "image",
                   "type": "file",
-                  "src": null
+                  "src": [],
+                  "description": "Optional. Stored in Cloudinary."
                 }
               ]
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/services",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "services"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "services"
+              ]
             },
-            "description": "Requires ADMIN role. Send as multipart/form-data. Image is optional."
+            "description": "Requires `ADMIN`. multipart/form-data because of the optional `image` upload.\n\nValidation: `title` 3-100 chars, `slug` lowercase-with-hyphens (`/^[a-z0-9]+(?:-[a-z0-9]+)*$/`), `description` min 10 chars, `category` min 2 chars, `price` > 0, `duration` positive integer. `slug` is unique — reusing one returns 409 \"A service with this slug already exists\".\n\nCaptures `{{serviceId}}`."
           },
-          "response": []
+          "response": [
+            {
+              "name": "Duplicate slug (reported as HTTP 500)",
+              "originalRequest": {},
+              "status": "Internal Server Error",
+              "code": 500,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": false,\n  \"statusCode\": 409,\n  \"name\": \"Internal Server Error\",\n  \"message\": \"A service with this slug already exists\"\n}"
+            }
+          ]
         },
         {
           "name": "Update Service",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// ---- FieldOps shared assertions + variable capture ----",
+                  "function decodeJwt(token) {\n    try {\n        var part = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');\n        while (part.length % 4) { part += '='; }\n        return JSON.parse(decodeURIComponent(escape(atob(part))));\n    } catch (e) {\n        return null;\n    }\n}\n\nfunction captureToken(token, key) {\n  if (!token) return;\n  pm.collectionVariables.set(key, token);\n  const payload = decodeJwt(token);\n  if (!payload) return;\n  if (payload.userId) pm.collectionVariables.set('userId', payload.userId);\n  if (payload.role) pm.collectionVariables.set('userRole', payload.role);\n  if (payload.role === 'ADMIN') pm.collectionVariables.set('adminAccessToken', token);\n  if (payload.role === 'TECHNICIAN') pm.collectionVariables.set('technicianAccessToken', token);\n  if (payload.role === 'CUSTOMER') pm.collectionVariables.set('customerAccessToken', token);\n}",
+                  "",
+                  "const body = pm.response.json();",
+                  "",
+                  "pm.test(\"Response status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Envelope success is true\", function () {",
+                  "    pm.expect(body.success, \"success\").to.be.true;",
+                  "});",
+                  "",
+                  "if (body.data && body.data.id) pm.collectionVariables.set(\"serviceId\", body.data.id);"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "PATCH",
             "header": [],
+            "auth": {
+              "type": "inherit"
+            },
             "body": {
               "mode": "formdata",
               "formdata": [
                 {
                   "key": "title",
-                  "value": "AC Repair Service - Premium",
-                  "type": "text"
+                  "value": "",
+                  "type": "text",
+                  "description": "Optional. 3-100 characters."
+                },
+                {
+                  "key": "slug",
+                  "value": "",
+                  "type": "text",
+                  "description": "Optional. Must stay unique across services."
+                },
+                {
+                  "key": "description",
+                  "value": "",
+                  "type": "text",
+                  "description": "Optional. Minimum 10 characters."
+                },
+                {
+                  "key": "category",
+                  "value": "",
+                  "type": "text",
+                  "description": "Optional. Minimum 2 characters."
                 },
                 {
                   "key": "price",
-                  "value": "2500",
-                  "type": "text"
+                  "value": "",
+                  "type": "text",
+                  "description": "Optional. Number greater than 0."
+                },
+                {
+                  "key": "duration",
+                  "value": "",
+                  "type": "text",
+                  "description": "Optional. Positive integer."
                 },
                 {
                   "key": "isActive",
                   "value": "true",
-                  "type": "text"
+                  "type": "text",
+                  "description": "Optional. true / false — sent as a text field in form-data."
                 },
                 {
                   "key": "image",
                   "type": "file",
-                  "src": null
+                  "src": [],
+                  "description": "Optional. Replaces the existing image."
                 }
               ]
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/services/:id",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "services", ":id"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "services",
+                ":id"
+              ],
               "variable": [
                 {
                   "key": "id",
-                  "value": "service-uuid-here"
+                  "value": "{{serviceId}}",
+                  "type": "string"
                 }
               ]
             },
-            "description": "Requires ADMIN role. Send as multipart/form-data. All fields are optional, including image."
+            "description": "Requires `ADMIN`. multipart/form-data. Every field is optional; `isActive` is a real JSON boolean here (unlike the query filters, which expect the strings \"true\"/\"false\"). Supplying a new `image` deletes the previous Cloudinary asset."
           },
           "response": []
         },
         {
           "name": "Delete Service",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// ---- FieldOps shared assertions + variable capture ----",
+                  "function decodeJwt(token) {\n    try {\n        var part = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');\n        while (part.length % 4) { part += '='; }\n        return JSON.parse(decodeURIComponent(escape(atob(part))));\n    } catch (e) {\n        return null;\n    }\n}\n\nfunction captureToken(token, key) {\n  if (!token) return;\n  pm.collectionVariables.set(key, token);\n  const payload = decodeJwt(token);\n  if (!payload) return;\n  if (payload.userId) pm.collectionVariables.set('userId', payload.userId);\n  if (payload.role) pm.collectionVariables.set('userRole', payload.role);\n  if (payload.role === 'ADMIN') pm.collectionVariables.set('adminAccessToken', token);\n  if (payload.role === 'TECHNICIAN') pm.collectionVariables.set('technicianAccessToken', token);\n  if (payload.role === 'CUSTOMER') pm.collectionVariables.set('customerAccessToken', token);\n}",
+                  "",
+                  "const body = pm.response.json();",
+                  "",
+                  "pm.test(\"Response status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Envelope success is true\", function () {",
+                  "    pm.expect(body.success, \"success\").to.be.true;",
+                  "});",
+                  ""
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "DELETE",
             "header": [],
+            "auth": {
+              "type": "inherit"
+            },
             "url": {
               "raw": "{{baseUrl}}/api/v1/services/:id",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "services", ":id"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "services",
+                ":id"
+              ],
               "variable": [
                 {
                   "key": "id",
-                  "value": "service-uuid-here"
+                  "value": "{{serviceId}}",
+                  "type": "string"
                 }
               ]
             },
-            "description": "Requires ADMIN role. Soft delete - sets isActive to false"
+            "description": "Requires `ADMIN`. Soft delete: sets `isActive = false` rather than removing the row, and deletes the Cloudinary image if one is attached. Existing bookings keep their reference to the service."
           },
           "response": []
         }
@@ -445,184 +1310,417 @@
     },
     {
       "name": "Technicians",
+      "description": "Technician profiles under `/api/v1/technicians`. Browsing is public; anything that touches a profile requires the `TECHNICIAN` role.\n\nA technician profile only exists after the user calls Create Technician Profile — until then the profile-scoped routes return \"Technician profile not found\".",
       "item": [
         {
           "name": "Get All Technicians",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// ---- FieldOps shared assertions + variable capture ----",
+                  "function decodeJwt(token) {\n    try {\n        var part = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');\n        while (part.length % 4) { part += '='; }\n        return JSON.parse(decodeURIComponent(escape(atob(part))));\n    } catch (e) {\n        return null;\n    }\n}\n\nfunction captureToken(token, key) {\n  if (!token) return;\n  pm.collectionVariables.set(key, token);\n  const payload = decodeJwt(token);\n  if (!payload) return;\n  if (payload.userId) pm.collectionVariables.set('userId', payload.userId);\n  if (payload.role) pm.collectionVariables.set('userRole', payload.role);\n  if (payload.role === 'ADMIN') pm.collectionVariables.set('adminAccessToken', token);\n  if (payload.role === 'TECHNICIAN') pm.collectionVariables.set('technicianAccessToken', token);\n  if (payload.role === 'CUSTOMER') pm.collectionVariables.set('customerAccessToken', token);\n}",
+                  "",
+                  "const body = pm.response.json();",
+                  "",
+                  "pm.test(\"Response status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Envelope success is true\", function () {",
+                  "    pm.expect(body.success, \"success\").to.be.true;",
+                  "});",
+                  "",
+                  "const rows = Array.isArray(body.data) ? body.data : [];",
+                  "if (rows.length && rows[0].id) pm.collectionVariables.set(\"technicianId\", rows[0].id);"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
             "header": [],
+            "auth": {
+              "type": "noauth"
+            },
             "url": {
               "raw": "{{baseUrl}}/api/v1/technicians?search=&specialization=&isAvailable=&minRate=&maxRate=&page=1&limit=10",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "technicians"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "technicians"
+              ],
               "query": [
                 {
                   "key": "search",
                   "value": "",
-                  "description": "Search by specialization, bio or name"
+                  "description": "Matches name or specialization.",
+                  "disabled": false
                 },
                 {
                   "key": "specialization",
                   "value": "",
-                  "description": "Filter by specialization"
+                  "description": "Exact specialization match.",
+                  "disabled": false
                 },
                 {
                   "key": "isAvailable",
                   "value": "",
-                  "description": "Filter by availability (true/false)"
+                  "description": "\"true\" or \"false\" only.",
+                  "disabled": false
                 },
                 {
                   "key": "minRate",
                   "value": "",
-                  "description": "Minimum hourly rate"
+                  "description": "Hourly rate lower bound, > 0.",
+                  "disabled": false
                 },
                 {
                   "key": "maxRate",
                   "value": "",
-                  "description": "Maximum hourly rate"
+                  "description": "Hourly rate upper bound, > 0.",
+                  "disabled": false
                 },
                 {
                   "key": "page",
                   "value": "1",
-                  "description": "Page number"
+                  "description": "Positive integer, default 1.",
+                  "disabled": false
                 },
                 {
                   "key": "limit",
                   "value": "10",
-                  "description": "Items per page (max 100)"
+                  "description": "Positive integer, max 100, default 10.",
+                  "disabled": false
                 }
               ]
-            }
+            },
+            "description": "Public, paginated list of technician profiles with their user details, aggregate rating and availability flag.\n\nCaptures the first profile id into `{{technicianId}}` — note this is the `TechnicianProfile.id`, which is what bookings and availability routes expect, not the underlying user id."
           },
           "response": []
         },
         {
           "name": "Get Technician By ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// ---- FieldOps shared assertions + variable capture ----",
+                  "function decodeJwt(token) {\n    try {\n        var part = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');\n        while (part.length % 4) { part += '='; }\n        return JSON.parse(decodeURIComponent(escape(atob(part))));\n    } catch (e) {\n        return null;\n    }\n}\n\nfunction captureToken(token, key) {\n  if (!token) return;\n  pm.collectionVariables.set(key, token);\n  const payload = decodeJwt(token);\n  if (!payload) return;\n  if (payload.userId) pm.collectionVariables.set('userId', payload.userId);\n  if (payload.role) pm.collectionVariables.set('userRole', payload.role);\n  if (payload.role === 'ADMIN') pm.collectionVariables.set('adminAccessToken', token);\n  if (payload.role === 'TECHNICIAN') pm.collectionVariables.set('technicianAccessToken', token);\n  if (payload.role === 'CUSTOMER') pm.collectionVariables.set('customerAccessToken', token);\n}",
+                  "",
+                  "const body = pm.response.json();",
+                  "",
+                  "pm.test(\"Response status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Envelope success is true\", function () {",
+                  "    pm.expect(body.success, \"success\").to.be.true;",
+                  "});",
+                  "",
+                  "if (body.data && body.data.id) pm.collectionVariables.set(\"technicianId\", body.data.id);"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
             "header": [],
+            "auth": {
+              "type": "noauth"
+            },
             "url": {
               "raw": "{{baseUrl}}/api/v1/technicians/:id",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "technicians", ":id"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "technicians",
+                ":id"
+              ],
               "variable": [
                 {
                   "key": "id",
-                  "value": "technician-profile-uuid"
+                  "value": "{{technicianId}}",
+                  "type": "string"
                 }
               ]
-            }
+            },
+            "description": "Public profile lookup. Captures `{{technicianId}}` so this can be used to seed the variable before creating a booking."
           },
           "response": []
         },
         {
           "name": "Create Technician Profile",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// ---- FieldOps shared assertions + variable capture ----",
+                  "function decodeJwt(token) {\n    try {\n        var part = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');\n        while (part.length % 4) { part += '='; }\n        return JSON.parse(decodeURIComponent(escape(atob(part))));\n    } catch (e) {\n        return null;\n    }\n}\n\nfunction captureToken(token, key) {\n  if (!token) return;\n  pm.collectionVariables.set(key, token);\n  const payload = decodeJwt(token);\n  if (!payload) return;\n  if (payload.userId) pm.collectionVariables.set('userId', payload.userId);\n  if (payload.role) pm.collectionVariables.set('userRole', payload.role);\n  if (payload.role === 'ADMIN') pm.collectionVariables.set('adminAccessToken', token);\n  if (payload.role === 'TECHNICIAN') pm.collectionVariables.set('technicianAccessToken', token);\n  if (payload.role === 'CUSTOMER') pm.collectionVariables.set('customerAccessToken', token);\n}",
+                  "",
+                  "const body = pm.response.json();",
+                  "",
+                  "pm.test(\"Response status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Envelope success is true\", function () {",
+                  "    pm.expect(body.success, \"success\").to.be.true;",
+                  "});",
+                  "",
+                  "if (body.data && body.data.id) pm.collectionVariables.set(\"technicianId\", body.data.id);"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [],
+            "auth": {
+              "type": "inherit"
+            },
             "body": {
               "mode": "formdata",
               "formdata": [
                 {
                   "key": "bio",
-                  "value": "Certified HVAC technician with 8+ years experience in residential and commercial systems",
-                  "type": "text"
+                  "value": "Certified HVAC technician with 8 years of experience in residential and commercial systems.",
+                  "type": "text",
+                  "description": "Optional. 10-500 characters."
                 },
                 {
                   "key": "experience",
                   "value": "8",
-                  "type": "text"
+                  "type": "text",
+                  "description": "Required. Integer, 0-50."
                 },
                 {
                   "key": "specialization",
                   "value": "HVAC",
-                  "type": "text"
+                  "type": "text",
+                  "description": "Required. 2-100 characters."
                 },
                 {
                   "key": "hourlyRate",
                   "value": "1200",
-                  "type": "text"
+                  "type": "text",
+                  "description": "Required. Number greater than 0."
                 },
                 {
                   "key": "profileImage",
                   "type": "file",
-                  "src": null
+                  "src": [],
+                  "description": "Optional. Stored in Cloudinary and mirrored to the user avatar."
                 }
               ]
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/technicians/profile",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "technicians", "profile"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "technicians",
+                "profile"
+              ]
             },
-            "description": "Requires TECHNICIAN role. Send as multipart/form-data. profileImage is optional."
+            "description": "Requires `TECHNICIAN`. multipart/form-data for the optional `profileImage`, which is also written back to the user avatar.\n\nValidation: `experience` integer 0-50, `specialization` 2-100 chars, `hourlyRate` > 0, `bio` optional 10-500 chars. One profile per user — a second call returns 409 \"Technician profile already exists\".\n\nCaptures `{{technicianId}}`."
           },
           "response": []
         },
         {
           "name": "Get My Technician Profile",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// ---- FieldOps shared assertions + variable capture ----",
+                  "function decodeJwt(token) {\n    try {\n        var part = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');\n        while (part.length % 4) { part += '='; }\n        return JSON.parse(decodeURIComponent(escape(atob(part))));\n    } catch (e) {\n        return null;\n    }\n}\n\nfunction captureToken(token, key) {\n  if (!token) return;\n  pm.collectionVariables.set(key, token);\n  const payload = decodeJwt(token);\n  if (!payload) return;\n  if (payload.userId) pm.collectionVariables.set('userId', payload.userId);\n  if (payload.role) pm.collectionVariables.set('userRole', payload.role);\n  if (payload.role === 'ADMIN') pm.collectionVariables.set('adminAccessToken', token);\n  if (payload.role === 'TECHNICIAN') pm.collectionVariables.set('technicianAccessToken', token);\n  if (payload.role === 'CUSTOMER') pm.collectionVariables.set('customerAccessToken', token);\n}",
+                  "",
+                  "const body = pm.response.json();",
+                  "",
+                  "pm.test(\"Response status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Envelope success is true\", function () {",
+                  "    pm.expect(body.success, \"success\").to.be.true;",
+                  "});",
+                  "",
+                  "if (body.data && body.data.id) pm.collectionVariables.set(\"technicianId\", body.data.id);"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
             "header": [],
+            "auth": {
+              "type": "inherit"
+            },
             "url": {
               "raw": "{{baseUrl}}/api/v1/technicians/profile/me",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "technicians", "profile", "me"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "technicians",
+                "profile",
+                "me"
+              ]
             },
-            "description": "Requires TECHNICIAN role"
+            "description": "Requires `TECHNICIAN`. Returns the caller's own profile with the related user record."
           },
           "response": []
         },
         {
           "name": "Update My Technician Profile",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// ---- FieldOps shared assertions + variable capture ----",
+                  "function decodeJwt(token) {\n    try {\n        var part = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');\n        while (part.length % 4) { part += '='; }\n        return JSON.parse(decodeURIComponent(escape(atob(part))));\n    } catch (e) {\n        return null;\n    }\n}\n\nfunction captureToken(token, key) {\n  if (!token) return;\n  pm.collectionVariables.set(key, token);\n  const payload = decodeJwt(token);\n  if (!payload) return;\n  if (payload.userId) pm.collectionVariables.set('userId', payload.userId);\n  if (payload.role) pm.collectionVariables.set('userRole', payload.role);\n  if (payload.role === 'ADMIN') pm.collectionVariables.set('adminAccessToken', token);\n  if (payload.role === 'TECHNICIAN') pm.collectionVariables.set('technicianAccessToken', token);\n  if (payload.role === 'CUSTOMER') pm.collectionVariables.set('customerAccessToken', token);\n}",
+                  "",
+                  "const body = pm.response.json();",
+                  "",
+                  "pm.test(\"Response status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Envelope success is true\", function () {",
+                  "    pm.expect(body.success, \"success\").to.be.true;",
+                  "});",
+                  "",
+                  "if (body.data && body.data.id) pm.collectionVariables.set(\"technicianId\", body.data.id);"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "PATCH",
             "header": [],
+            "auth": {
+              "type": "inherit"
+            },
             "body": {
               "mode": "formdata",
               "formdata": [
                 {
                   "key": "bio",
-                  "value": "Senior HVAC technician with 10+ years experience. Specialize in commercial cooling systems.",
-                  "type": "text"
+                  "value": "Senior HVAC technician specialising in commercial cooling systems.",
+                  "type": "text",
+                  "description": "Optional. 10-500 characters."
                 },
                 {
                   "key": "experience",
                   "value": "10",
-                  "type": "text"
+                  "type": "text",
+                  "description": "Optional. Integer, 0-50."
+                },
+                {
+                  "key": "specialization",
+                  "value": "HVAC",
+                  "type": "text",
+                  "description": "Optional. 2-100 characters."
                 },
                 {
                   "key": "hourlyRate",
                   "value": "1500",
-                  "type": "text"
+                  "type": "text",
+                  "description": "Optional. Number greater than 0."
                 },
                 {
                   "key": "profileImage",
                   "type": "file",
-                  "src": null
+                  "src": [],
+                  "description": "Optional. Replaces the existing image."
                 }
               ]
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/technicians/profile/me",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "technicians", "profile", "me"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "technicians",
+                "profile",
+                "me"
+              ]
             },
-            "description": "Requires TECHNICIAN role. Send as multipart/form-data. All fields are optional, including profileImage."
+            "description": "Requires `TECHNICIAN`. multipart/form-data. All fields optional — this is the partial form of the create schema, so `experience` and `hourlyRate` can be changed without resending everything. A new `profileImage` replaces the old Cloudinary asset."
           },
           "response": []
         },
         {
           "name": "Toggle Availability",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// ---- FieldOps shared assertions + variable capture ----",
+                  "function decodeJwt(token) {\n    try {\n        var part = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');\n        while (part.length % 4) { part += '='; }\n        return JSON.parse(decodeURIComponent(escape(atob(part))));\n    } catch (e) {\n        return null;\n    }\n}\n\nfunction captureToken(token, key) {\n  if (!token) return;\n  pm.collectionVariables.set(key, token);\n  const payload = decodeJwt(token);\n  if (!payload) return;\n  if (payload.userId) pm.collectionVariables.set('userId', payload.userId);\n  if (payload.role) pm.collectionVariables.set('userRole', payload.role);\n  if (payload.role === 'ADMIN') pm.collectionVariables.set('adminAccessToken', token);\n  if (payload.role === 'TECHNICIAN') pm.collectionVariables.set('technicianAccessToken', token);\n  if (payload.role === 'CUSTOMER') pm.collectionVariables.set('customerAccessToken', token);\n}",
+                  "",
+                  "const body = pm.response.json();",
+                  "",
+                  "pm.test(\"Response status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Envelope success is true\", function () {",
+                  "    pm.expect(body.success, \"success\").to.be.true;",
+                  "});",
+                  "",
+                  "if (body.data && body.data.id) pm.collectionVariables.set(\"technicianId\", body.data.id);"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "PATCH",
             "header": [],
+            "auth": {
+              "type": "inherit"
+            },
             "url": {
               "raw": "{{baseUrl}}/api/v1/technicians/availability/toggle",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "technicians", "availability", "toggle"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "technicians",
+                "availability",
+                "toggle"
+              ]
             },
-            "description": "Requires TECHNICIAN role. Toggles isAvailable flag."
+            "description": "Requires `TECHNICIAN`. Flips the profile-level `isAvailable` flag that customers see when browsing. This is separate from individual availability slots under `/availability`."
           },
           "response": []
         }
@@ -630,149 +1728,353 @@
     },
     {
       "name": "Availability",
+      "description": "Time slots under `/api/v1/availability`. Creating, editing and deleting requires `TECHNICIAN`; reading a technician's public slots is open.\n\nSlots cannot be in the past, must satisfy `startTime < endTime`, and cannot overlap another slot for the same technician on the same day. Booked slots are locked — updates and deletes are rejected until the booking is cancelled.",
       "item": [
         {
           "name": "Create Availability",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// ---- FieldOps shared assertions + variable capture ----",
+                  "function decodeJwt(token) {\n    try {\n        var part = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');\n        while (part.length % 4) { part += '='; }\n        return JSON.parse(decodeURIComponent(escape(atob(part))));\n    } catch (e) {\n        return null;\n    }\n}\n\nfunction captureToken(token, key) {\n  if (!token) return;\n  pm.collectionVariables.set(key, token);\n  const payload = decodeJwt(token);\n  if (!payload) return;\n  if (payload.userId) pm.collectionVariables.set('userId', payload.userId);\n  if (payload.role) pm.collectionVariables.set('userRole', payload.role);\n  if (payload.role === 'ADMIN') pm.collectionVariables.set('adminAccessToken', token);\n  if (payload.role === 'TECHNICIAN') pm.collectionVariables.set('technicianAccessToken', token);\n  if (payload.role === 'CUSTOMER') pm.collectionVariables.set('customerAccessToken', token);\n}",
+                  "",
+                  "const body = pm.response.json();",
+                  "",
+                  "pm.test(\"Response status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Envelope success is true\", function () {",
+                  "    pm.expect(body.success, \"success\").to.be.true;",
+                  "});",
+                  "",
+                  "if (body.data && body.data.id) pm.collectionVariables.set(\"availabilityId\", body.data.id);"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
+            "header": [],
+            "auth": {
+              "type": "inherit"
+            },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"date\": \"2026-09-15T00:00:00.000Z\",\n  \"startTime\": \"09:00\",\n  \"endTime\": \"12:00\"\n}"
+              "raw": "{\n  \"date\": \"{{futureDateIso}}\",\n  \"startTime\": \"09:00\",\n  \"endTime\": \"12:00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/availability",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "availability"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "availability"
+              ]
             },
-            "description": "Requires TECHNICIAN role. date must be ISO datetime. Times in HH:MM 24-hour format."
+            "description": "Requires `TECHNICIAN`. `date` must be a full ISO datetime (Zod `datetime()`), not a bare date — `{{futureDateIso}}` is generated for you by the collection-level pre-request script. Times are `HH:MM` 24-hour strings.\n\nCaptures `{{availabilityId}}`, which Create Booking needs."
           },
-          "response": []
+          "response": [
+            {
+              "name": "Overlapping slot (reported as HTTP 500)",
+              "originalRequest": {},
+              "status": "Internal Server Error",
+              "code": 500,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": false,\n  \"statusCode\": 409,\n  \"name\": \"Internal Server Error\",\n  \"message\": \"This time slot overlaps with an existing availability\"\n}"
+            }
+          ]
         },
         {
           "name": "Get My Availability",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// ---- FieldOps shared assertions + variable capture ----",
+                  "function decodeJwt(token) {\n    try {\n        var part = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');\n        while (part.length % 4) { part += '='; }\n        return JSON.parse(decodeURIComponent(escape(atob(part))));\n    } catch (e) {\n        return null;\n    }\n}\n\nfunction captureToken(token, key) {\n  if (!token) return;\n  pm.collectionVariables.set(key, token);\n  const payload = decodeJwt(token);\n  if (!payload) return;\n  if (payload.userId) pm.collectionVariables.set('userId', payload.userId);\n  if (payload.role) pm.collectionVariables.set('userRole', payload.role);\n  if (payload.role === 'ADMIN') pm.collectionVariables.set('adminAccessToken', token);\n  if (payload.role === 'TECHNICIAN') pm.collectionVariables.set('technicianAccessToken', token);\n  if (payload.role === 'CUSTOMER') pm.collectionVariables.set('customerAccessToken', token);\n}",
+                  "",
+                  "const body = pm.response.json();",
+                  "",
+                  "pm.test(\"Response status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Envelope success is true\", function () {",
+                  "    pm.expect(body.success, \"success\").to.be.true;",
+                  "});",
+                  "",
+                  "const rows = Array.isArray(body.data) ? body.data : [];",
+                  "if (rows.length && rows[0].id) pm.collectionVariables.set(\"availabilityId\", rows[0].id);"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
             "header": [],
+            "auth": {
+              "type": "inherit"
+            },
             "url": {
-              "raw": "{{baseUrl}}/api/v1/availability/my?date=&isBooked=&page=1&limit=20",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "availability", "my"],
+              "raw": "{{baseUrl}}/api/v1/availability/my?date={{futureDate}}&isBooked=false&page=1&limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "availability",
+                "my"
+              ],
               "query": [
                 {
                   "key": "date",
-                  "value": "",
-                  "description": "Filter by date (ISO)"
+                  "value": "{{futureDate}}",
+                  "description": "Exact date filter (YYYY-MM-DD).",
+                  "disabled": false
                 },
                 {
                   "key": "isBooked",
-                  "value": "",
-                  "description": "Filter by booked status (true/false)"
+                  "value": "false",
+                  "description": "\"true\" or \"false\" only.",
+                  "disabled": false
                 },
                 {
                   "key": "page",
                   "value": "1",
-                  "description": "Page number"
+                  "description": "Positive integer, default 1.",
+                  "disabled": false
                 },
                 {
                   "key": "limit",
                   "value": "20",
-                  "description": "Items per page (max 100)"
+                  "description": "Positive integer, max 100, default 20.",
+                  "disabled": false
                 }
               ]
             },
-            "description": "Requires TECHNICIAN role"
+            "description": "Requires `TECHNICIAN`. Paginated list of the caller's slots. Note the default page size here is 20, not 10.\n\nCaptures the first slot id into `{{availabilityId}}`."
           },
           "response": []
         },
         {
           "name": "Get Technician Availability",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// ---- FieldOps shared assertions + variable capture ----",
+                  "function decodeJwt(token) {\n    try {\n        var part = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');\n        while (part.length % 4) { part += '='; }\n        return JSON.parse(decodeURIComponent(escape(atob(part))));\n    } catch (e) {\n        return null;\n    }\n}\n\nfunction captureToken(token, key) {\n  if (!token) return;\n  pm.collectionVariables.set(key, token);\n  const payload = decodeJwt(token);\n  if (!payload) return;\n  if (payload.userId) pm.collectionVariables.set('userId', payload.userId);\n  if (payload.role) pm.collectionVariables.set('userRole', payload.role);\n  if (payload.role === 'ADMIN') pm.collectionVariables.set('adminAccessToken', token);\n  if (payload.role === 'TECHNICIAN') pm.collectionVariables.set('technicianAccessToken', token);\n  if (payload.role === 'CUSTOMER') pm.collectionVariables.set('customerAccessToken', token);\n}",
+                  "",
+                  "const body = pm.response.json();",
+                  "",
+                  "pm.test(\"Response status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Envelope success is true\", function () {",
+                  "    pm.expect(body.success, \"success\").to.be.true;",
+                  "});",
+                  "",
+                  "const rows = Array.isArray(body.data) ? body.data : [];",
+                  "if (rows.length && rows[0].id) pm.collectionVariables.set(\"availabilityId\", rows[0].id);"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
             "header": [],
+            "auth": {
+              "type": "noauth"
+            },
             "url": {
-              "raw": "{{baseUrl}}/api/v1/availability/technician/:technicianId?date=&page=1&limit=20",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "availability", "technician", ":technicianId"],
+              "raw": "{{baseUrl}}/api/v1/availability/technician/:technicianId?date={{futureDate}}&isBooked=false&page=1&limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "availability",
+                "technician",
+                ":technicianId"
+              ],
               "query": [
                 {
                   "key": "date",
-                  "value": "",
-                  "description": "Filter by date (ISO)"
+                  "value": "{{futureDate}}",
+                  "description": "Exact date filter (YYYY-MM-DD).",
+                  "disabled": false
+                },
+                {
+                  "key": "isBooked",
+                  "value": "false",
+                  "description": "\"true\" or \"false\". Defaults to \"false\" when omitted.",
+                  "disabled": false
                 },
                 {
                   "key": "page",
                   "value": "1",
-                  "description": "Page number"
+                  "description": "Positive integer, default 1.",
+                  "disabled": false
                 },
                 {
                   "key": "limit",
                   "value": "20",
-                  "description": "Items per page (max 100)"
+                  "description": "Positive integer, max 100, default 20.",
+                  "disabled": false
                 }
               ],
               "variable": [
                 {
                   "key": "technicianId",
-                  "value": "technician-profile-uuid"
+                  "value": "{{technicianId}}",
+                  "type": "string"
                 }
               ]
             },
-            "description": "Public endpoint. Only shows unbooked slots by default."
+            "description": "Public list of a technician's slots, used by customers to pick a time. When `isBooked` is omitted the service defaults to free slots only.\n\nCaptures the first slot id into `{{availabilityId}}`."
           },
           "response": []
         },
         {
           "name": "Update Availability",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// ---- FieldOps shared assertions + variable capture ----",
+                  "function decodeJwt(token) {\n    try {\n        var part = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');\n        while (part.length % 4) { part += '='; }\n        return JSON.parse(decodeURIComponent(escape(atob(part))));\n    } catch (e) {\n        return null;\n    }\n}\n\nfunction captureToken(token, key) {\n  if (!token) return;\n  pm.collectionVariables.set(key, token);\n  const payload = decodeJwt(token);\n  if (!payload) return;\n  if (payload.userId) pm.collectionVariables.set('userId', payload.userId);\n  if (payload.role) pm.collectionVariables.set('userRole', payload.role);\n  if (payload.role === 'ADMIN') pm.collectionVariables.set('adminAccessToken', token);\n  if (payload.role === 'TECHNICIAN') pm.collectionVariables.set('technicianAccessToken', token);\n  if (payload.role === 'CUSTOMER') pm.collectionVariables.set('customerAccessToken', token);\n}",
+                  "",
+                  "const body = pm.response.json();",
+                  "",
+                  "pm.test(\"Response status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Envelope success is true\", function () {",
+                  "    pm.expect(body.success, \"success\").to.be.true;",
+                  "});",
+                  "",
+                  "if (body.data && body.data.id) pm.collectionVariables.set(\"availabilityId\", body.data.id);"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "PATCH",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
+            "header": [],
+            "auth": {
+              "type": "inherit"
+            },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"startTime\": \"10:00\",\n  \"endTime\": \"14:00\"\n}"
+              "raw": "{\n  \"date\": \"{{futureDateIso}}\",\n  \"startTime\": \"10:00\",\n  \"endTime\": \"13:00\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/availability/:id",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "availability", ":id"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "availability",
+                ":id"
+              ],
               "variable": [
                 {
                   "key": "id",
-                  "value": "availability-uuid"
+                  "value": "{{availabilityId}}",
+                  "type": "string"
                 }
               ]
             },
-            "description": "Requires TECHNICIAN role. Can only update own unbooked slots."
+            "description": "Requires `TECHNICIAN`, and only for a slot the caller owns. All fields optional, but the same past-date, time-order and overlap checks apply. Booked slots cannot be edited."
           },
           "response": []
         },
         {
           "name": "Delete Availability",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// ---- FieldOps shared assertions + variable capture ----",
+                  "function decodeJwt(token) {\n    try {\n        var part = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');\n        while (part.length % 4) { part += '='; }\n        return JSON.parse(decodeURIComponent(escape(atob(part))));\n    } catch (e) {\n        return null;\n    }\n}\n\nfunction captureToken(token, key) {\n  if (!token) return;\n  pm.collectionVariables.set(key, token);\n  const payload = decodeJwt(token);\n  if (!payload) return;\n  if (payload.userId) pm.collectionVariables.set('userId', payload.userId);\n  if (payload.role) pm.collectionVariables.set('userRole', payload.role);\n  if (payload.role === 'ADMIN') pm.collectionVariables.set('adminAccessToken', token);\n  if (payload.role === 'TECHNICIAN') pm.collectionVariables.set('technicianAccessToken', token);\n  if (payload.role === 'CUSTOMER') pm.collectionVariables.set('customerAccessToken', token);\n}",
+                  "",
+                  "const body = pm.response.json();",
+                  "",
+                  "pm.test(\"Response status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Envelope success is true\", function () {",
+                  "    pm.expect(body.success, \"success\").to.be.true;",
+                  "});",
+                  ""
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "DELETE",
             "header": [],
+            "auth": {
+              "type": "inherit"
+            },
             "url": {
               "raw": "{{baseUrl}}/api/v1/availability/:id",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "availability", ":id"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "availability",
+                ":id"
+              ],
               "variable": [
                 {
                   "key": "id",
-                  "value": "availability-uuid"
+                  "value": "{{availabilityId}}",
+                  "type": "string"
                 }
               ]
             },
-            "description": "Requires TECHNICIAN role. Can only delete own unbooked slots."
+            "description": "Requires `TECHNICIAN`, and only for a slot the caller owns. Booked slots cannot be deleted — cancel the booking first, which frees the slot."
           },
           "response": []
         }
@@ -780,158 +2082,392 @@
     },
     {
       "name": "Bookings",
+      "description": "Booking lifecycle under `/api/v1/bookings`. Customers create, list, cancel and read bookings; technicians list their own queue and drive status transitions.\n\nValid transitions: PENDING to ACCEPTED / REJECTED / CANCELLED, ACCEPTED to IN_PROGRESS / CANCELLED, IN_PROGRESS to COMPLETED / CANCELLED. COMPLETED, REJECTED and CANCELLED are terminal. REJECTING or CANCELLING frees the availability slot.",
       "item": [
         {
           "name": "Create Booking",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// ---- FieldOps shared assertions + variable capture ----",
+                  "function decodeJwt(token) {\n    try {\n        var part = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');\n        while (part.length % 4) { part += '='; }\n        return JSON.parse(decodeURIComponent(escape(atob(part))));\n    } catch (e) {\n        return null;\n    }\n}\n\nfunction captureToken(token, key) {\n  if (!token) return;\n  pm.collectionVariables.set(key, token);\n  const payload = decodeJwt(token);\n  if (!payload) return;\n  if (payload.userId) pm.collectionVariables.set('userId', payload.userId);\n  if (payload.role) pm.collectionVariables.set('userRole', payload.role);\n  if (payload.role === 'ADMIN') pm.collectionVariables.set('adminAccessToken', token);\n  if (payload.role === 'TECHNICIAN') pm.collectionVariables.set('technicianAccessToken', token);\n  if (payload.role === 'CUSTOMER') pm.collectionVariables.set('customerAccessToken', token);\n}",
+                  "",
+                  "const body = pm.response.json();",
+                  "",
+                  "pm.test(\"Response status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Envelope success is true\", function () {",
+                  "    pm.expect(body.success, \"success\").to.be.true;",
+                  "});",
+                  "",
+                  "if (body.data && body.data.id) pm.collectionVariables.set(\"bookingId\", body.data.id);"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
+            "header": [],
+            "auth": {
+              "type": "inherit"
+            },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"technicianId\": \"technician-profile-uuid\",\n  \"serviceId\": \"service-uuid\",\n  \"availabilityId\": \"availability-uuid\",\n  \"address\": \"House 12, Road 5, Dhanmondi, Dhaka\",\n  \"problemDescription\": \"AC not cooling properly, needs repair and gas refill\"\n}"
+              "raw": "{\n  \"technicianId\": \"{{technicianId}}\",\n  \"serviceId\": \"{{serviceId}}\",\n  \"availabilityId\": \"{{availabilityId}}\",\n  \"address\": \"House 12, Road 5, Dhanmondi, Dhaka\",\n  \"problemDescription\": \"AC is not cooling properly and needs a gas refill and compressor check.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/bookings",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "bookings"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "bookings"
+              ]
             },
-            "description": "Requires CUSTOMER role. Creates a PENDING booking and marks the availability slot as booked."
+            "description": "Requires `CUSTOMER`. All ids must be valid UUIDs: `technicianId` (a TechnicianProfile id), `serviceId`, and `availabilityId` (an unbooked, unrequested slot belonging to that technician). `address` is 10-500 chars, `problemDescription` 10-1000 chars.\n\nCreates the booking as PENDING, prices it from the service and marks the slot as booked, all in one transaction. Captures `{{bookingId}}`."
           },
           "response": []
         },
         {
           "name": "Get My Bookings (Customer)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// ---- FieldOps shared assertions + variable capture ----",
+                  "function decodeJwt(token) {\n    try {\n        var part = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');\n        while (part.length % 4) { part += '='; }\n        return JSON.parse(decodeURIComponent(escape(atob(part))));\n    } catch (e) {\n        return null;\n    }\n}\n\nfunction captureToken(token, key) {\n  if (!token) return;\n  pm.collectionVariables.set(key, token);\n  const payload = decodeJwt(token);\n  if (!payload) return;\n  if (payload.userId) pm.collectionVariables.set('userId', payload.userId);\n  if (payload.role) pm.collectionVariables.set('userRole', payload.role);\n  if (payload.role === 'ADMIN') pm.collectionVariables.set('adminAccessToken', token);\n  if (payload.role === 'TECHNICIAN') pm.collectionVariables.set('technicianAccessToken', token);\n  if (payload.role === 'CUSTOMER') pm.collectionVariables.set('customerAccessToken', token);\n}",
+                  "",
+                  "const body = pm.response.json();",
+                  "",
+                  "pm.test(\"Response status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Envelope success is true\", function () {",
+                  "    pm.expect(body.success, \"success\").to.be.true;",
+                  "});",
+                  "",
+                  "const rows = Array.isArray(body.data) ? body.data : [];",
+                  "if (rows.length && rows[0].id) pm.collectionVariables.set(\"bookingId\", rows[0].id);"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
             "header": [],
+            "auth": {
+              "type": "inherit"
+            },
             "url": {
               "raw": "{{baseUrl}}/api/v1/bookings/my?status=&page=1&limit=10",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "bookings", "my"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "bookings",
+                "my"
+              ],
               "query": [
                 {
                   "key": "status",
                   "value": "",
-                  "description": "PENDING, ACCEPTED, REJECTED, IN_PROGRESS, COMPLETED, CANCELLED"
+                  "description": "PENDING | ACCEPTED | REJECTED | IN_PROGRESS | COMPLETED | CANCELLED",
+                  "disabled": false
                 },
                 {
                   "key": "page",
                   "value": "1",
-                  "description": "Page number"
+                  "description": "Positive integer, default 1.",
+                  "disabled": false
                 },
                 {
                   "key": "limit",
                   "value": "10",
-                  "description": "Items per page (max 100)"
+                  "description": "Positive integer, max 100, default 10.",
+                  "disabled": false
                 }
               ]
             },
-            "description": "Requires CUSTOMER role"
+            "description": "Requires `CUSTOMER`. Paginated bookings for the caller with service, technician, availability, payment and review expanded.\n\nCaptures the first booking id into `{{bookingId}}`."
           },
           "response": []
         },
         {
           "name": "Get My Bookings (Technician)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// ---- FieldOps shared assertions + variable capture ----",
+                  "function decodeJwt(token) {\n    try {\n        var part = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');\n        while (part.length % 4) { part += '='; }\n        return JSON.parse(decodeURIComponent(escape(atob(part))));\n    } catch (e) {\n        return null;\n    }\n}\n\nfunction captureToken(token, key) {\n  if (!token) return;\n  pm.collectionVariables.set(key, token);\n  const payload = decodeJwt(token);\n  if (!payload) return;\n  if (payload.userId) pm.collectionVariables.set('userId', payload.userId);\n  if (payload.role) pm.collectionVariables.set('userRole', payload.role);\n  if (payload.role === 'ADMIN') pm.collectionVariables.set('adminAccessToken', token);\n  if (payload.role === 'TECHNICIAN') pm.collectionVariables.set('technicianAccessToken', token);\n  if (payload.role === 'CUSTOMER') pm.collectionVariables.set('customerAccessToken', token);\n}",
+                  "",
+                  "const body = pm.response.json();",
+                  "",
+                  "pm.test(\"Response status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Envelope success is true\", function () {",
+                  "    pm.expect(body.success, \"success\").to.be.true;",
+                  "});",
+                  "",
+                  "const rows = Array.isArray(body.data) ? body.data : [];",
+                  "if (rows.length && rows[0].id) pm.collectionVariables.set(\"bookingId\", rows[0].id);"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
             "header": [],
+            "auth": {
+              "type": "inherit"
+            },
             "url": {
               "raw": "{{baseUrl}}/api/v1/bookings/technician/my?status=&page=1&limit=10",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "bookings", "technician", "my"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "bookings",
+                "technician",
+                "my"
+              ],
               "query": [
                 {
                   "key": "status",
                   "value": "",
-                  "description": "PENDING, ACCEPTED, REJECTED, IN_PROGRESS, COMPLETED, CANCELLED"
+                  "description": "PENDING | ACCEPTED | REJECTED | IN_PROGRESS | COMPLETED | CANCELLED",
+                  "disabled": false
                 },
                 {
                   "key": "page",
                   "value": "1",
-                  "description": "Page number"
+                  "description": "Positive integer, default 1.",
+                  "disabled": false
                 },
                 {
                   "key": "limit",
                   "value": "10",
-                  "description": "Items per page (max 100)"
+                  "description": "Positive integer, max 100, default 10.",
+                  "disabled": false
                 }
               ]
             },
-            "description": "Requires TECHNICIAN role"
+            "description": "Requires `TECHNICIAN`. The technician-side view of the same booking list, with the customer record expanded.\n\nCaptures the first booking id into `{{bookingId}}`."
           },
           "response": []
         },
         {
           "name": "Get Booking By ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// ---- FieldOps shared assertions + variable capture ----",
+                  "function decodeJwt(token) {\n    try {\n        var part = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');\n        while (part.length % 4) { part += '='; }\n        return JSON.parse(decodeURIComponent(escape(atob(part))));\n    } catch (e) {\n        return null;\n    }\n}\n\nfunction captureToken(token, key) {\n  if (!token) return;\n  pm.collectionVariables.set(key, token);\n  const payload = decodeJwt(token);\n  if (!payload) return;\n  if (payload.userId) pm.collectionVariables.set('userId', payload.userId);\n  if (payload.role) pm.collectionVariables.set('userRole', payload.role);\n  if (payload.role === 'ADMIN') pm.collectionVariables.set('adminAccessToken', token);\n  if (payload.role === 'TECHNICIAN') pm.collectionVariables.set('technicianAccessToken', token);\n  if (payload.role === 'CUSTOMER') pm.collectionVariables.set('customerAccessToken', token);\n}",
+                  "",
+                  "const body = pm.response.json();",
+                  "",
+                  "pm.test(\"Response status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Envelope success is true\", function () {",
+                  "    pm.expect(body.success, \"success\").to.be.true;",
+                  "});",
+                  "",
+                  "if (body.data && body.data.id) pm.collectionVariables.set(\"bookingId\", body.data.id);"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
             "header": [],
+            "auth": {
+              "type": "inherit"
+            },
             "url": {
               "raw": "{{baseUrl}}/api/v1/bookings/:id",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "bookings", ":id"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "bookings",
+                ":id"
+              ],
               "variable": [
                 {
                   "key": "id",
-                  "value": "booking-uuid"
+                  "value": "{{bookingId}}",
+                  "type": "string"
                 }
               ]
             },
-            "description": "Requires CUSTOMER or TECHNICIAN role. Only the involved customer or technician can view."
+            "description": "Requires `CUSTOMER` or `TECHNICIAN`, and only if the caller is the booking's customer or its assigned technician. Returns the full relation graph."
           },
           "response": []
         },
         {
           "name": "Update Booking Status",
-          "request": {
-            "method": "PATCH",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// ---- FieldOps shared assertions + variable capture ----",
+                  "function decodeJwt(token) {\n    try {\n        var part = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');\n        while (part.length % 4) { part += '='; }\n        return JSON.parse(decodeURIComponent(escape(atob(part))));\n    } catch (e) {\n        return null;\n    }\n}\n\nfunction captureToken(token, key) {\n  if (!token) return;\n  pm.collectionVariables.set(key, token);\n  const payload = decodeJwt(token);\n  if (!payload) return;\n  if (payload.userId) pm.collectionVariables.set('userId', payload.userId);\n  if (payload.role) pm.collectionVariables.set('userRole', payload.role);\n  if (payload.role === 'ADMIN') pm.collectionVariables.set('adminAccessToken', token);\n  if (payload.role === 'TECHNICIAN') pm.collectionVariables.set('technicianAccessToken', token);\n  if (payload.role === 'CUSTOMER') pm.collectionVariables.set('customerAccessToken', token);\n}",
+                  "",
+                  "const body = pm.response.json();",
+                  "",
+                  "pm.test(\"Response status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Envelope success is true\", function () {",
+                  "    pm.expect(body.success, \"success\").to.be.true;",
+                  "});",
+                  "",
+                  "if (body.data && body.data.id) pm.collectionVariables.set(\"bookingId\", body.data.id);"
+                ]
               }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"status\": \"ACCEPTED\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/bookings/:id/status",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "bookings", ":id", "status"],
-              "variable": [
-                {
-                  "key": "id",
-                  "value": "booking-uuid"
-                }
-              ]
-            },
-            "description": "Requires TECHNICIAN role. Transitions: PENDING->ACCEPTED/REJECTED/CANCELLED, ACCEPTED->IN_PROGRESS/CANCELLED, IN_PROGRESS->COMPLETED/CANCELLED. Rejecting/cancelling frees the availability slot."
-          },
-          "response": []
-        },
-        {
-          "name": "Cancel Booking",
+            }
+          ],
           "request": {
             "method": "PATCH",
             "header": [],
+            "auth": {
+              "type": "inherit"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"ACCEPTED\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
             "url": {
-              "raw": "{{baseUrl}}/api/v1/bookings/:id/cancel",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "bookings", ":id", "cancel"],
+              "raw": "{{baseUrl}}/api/v1/bookings/:id/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "bookings",
+                ":id",
+                "status"
+              ],
               "variable": [
                 {
                   "key": "id",
-                  "value": "booking-uuid"
+                  "value": "{{bookingId}}",
+                  "type": "string"
                 }
               ]
             },
-            "description": "Requires CUSTOMER role. Can only cancel PENDING or ACCEPTED bookings. Frees the availability slot."
+            "description": "Requires `TECHNICIAN`, and only for a booking assigned to them. Body is a single `status` field; `PENDING` is not accepted here because the transition out of it is ACCEPTED, REJECTED or CANCELLED.\n\nRun these in order to walk a booking to completion: ACCEPTED -> IN_PROGRESS -> COMPLETED. Rejecting or cancelling frees the availability slot."
+          },
+          "response": [
+            {
+              "name": "Illegal transition",
+              "originalRequest": {},
+              "status": "Internal Server Error",
+              "code": 500,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": false,\n  \"statusCode\": 400,\n  \"name\": \"Internal Server Error\",\n  \"message\": \"Cannot change booking status from COMPLETED to ACCEPTED\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Cancel Booking",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// ---- FieldOps shared assertions + variable capture ----",
+                  "function decodeJwt(token) {\n    try {\n        var part = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');\n        while (part.length % 4) { part += '='; }\n        return JSON.parse(decodeURIComponent(escape(atob(part))));\n    } catch (e) {\n        return null;\n    }\n}\n\nfunction captureToken(token, key) {\n  if (!token) return;\n  pm.collectionVariables.set(key, token);\n  const payload = decodeJwt(token);\n  if (!payload) return;\n  if (payload.userId) pm.collectionVariables.set('userId', payload.userId);\n  if (payload.role) pm.collectionVariables.set('userRole', payload.role);\n  if (payload.role === 'ADMIN') pm.collectionVariables.set('adminAccessToken', token);\n  if (payload.role === 'TECHNICIAN') pm.collectionVariables.set('technicianAccessToken', token);\n  if (payload.role === 'CUSTOMER') pm.collectionVariables.set('customerAccessToken', token);\n}",
+                  "",
+                  "const body = pm.response.json();",
+                  "",
+                  "pm.test(\"Response status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Envelope success is true\", function () {",
+                  "    pm.expect(body.success, \"success\").to.be.true;",
+                  "});",
+                  "",
+                  "if (body.data && body.data.id) pm.collectionVariables.set(\"bookingId\", body.data.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "auth": {
+              "type": "inherit"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/bookings/:id/cancel",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "bookings",
+                ":id",
+                "cancel"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{bookingId}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Requires `CUSTOMER`, and only for the caller's own booking while it is still PENDING or ACCEPTED. Sets status CANCELLED and releases the availability slot in the same transaction."
           },
           "response": []
         }
@@ -939,32 +2475,109 @@
     },
     {
       "name": "Payments",
+      "description": "Stripe-backed payments under `/api/v1/payments`. A booking must be ACCEPTED before checkout, and each booking can have at most one payment record.",
       "item": [
         {
           "name": "Create Stripe Checkout",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// ---- FieldOps shared assertions + variable capture ----",
+                  "function decodeJwt(token) {\n    try {\n        var part = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');\n        while (part.length % 4) { part += '='; }\n        return JSON.parse(decodeURIComponent(escape(atob(part))));\n    } catch (e) {\n        return null;\n    }\n}\n\nfunction captureToken(token, key) {\n  if (!token) return;\n  pm.collectionVariables.set(key, token);\n  const payload = decodeJwt(token);\n  if (!payload) return;\n  if (payload.userId) pm.collectionVariables.set('userId', payload.userId);\n  if (payload.role) pm.collectionVariables.set('userRole', payload.role);\n  if (payload.role === 'ADMIN') pm.collectionVariables.set('adminAccessToken', token);\n  if (payload.role === 'TECHNICIAN') pm.collectionVariables.set('technicianAccessToken', token);\n  if (payload.role === 'CUSTOMER') pm.collectionVariables.set('customerAccessToken', token);\n}",
+                  "",
+                  "const body = pm.response.json();",
+                  "",
+                  "pm.test(\"Response status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Envelope success is true\", function () {",
+                  "    pm.expect(body.success, \"success\").to.be.true;",
+                  "});",
+                  "",
+                  "const data = body.data || {};",
+                  "if (data.sessionId) pm.collectionVariables.set(\"sessionId\", data.sessionId);",
+                  "if (data.checkoutUrl) pm.collectionVariables.set(\"checkoutUrl\", data.checkoutUrl);",
+                  "if (data.bookingId) pm.collectionVariables.set(\"bookingId\", data.bookingId);"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
+            "header": [],
+            "auth": {
+              "type": "inherit"
+            },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"bookingId\": \"booking-uuid\"\n}"
+              "raw": "{\n  \"bookingId\": \"{{bookingId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/payments/checkout",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "payments", "checkout"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "payments",
+                "checkout"
+              ]
             },
-            "description": "Requires CUSTOMER role. Only works for ACCEPTED bookings that are not already paid."
+            "description": "Requires `CUSTOMER`. Body is just `bookingId` (UUID). The booking must be ACCEPTED and unpaid. Creates or updates the payment record as PENDING with the Checkout Session id as `transactionId`, and returns the hosted `checkoutUrl` plus `sessionId` and the amount in the major currency unit (Stripe receives cents).\n\nCaptures `{{sessionId}}` and `{{checkoutUrl}}`."
           },
-          "response": []
+          "response": [
+            {
+              "name": "Success",
+              "originalRequest": {},
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": true,\n  \"statusCode\": 200,\n  \"message\": \"Checkout session created successfully\",\n  \"data\": {\n    \"checkoutUrl\": \"https://checkout.stripe.com/c/pay/cs_test_123#fidkdWxOYHwn\",\n    \"sessionId\": \"cs_test_123\",\n    \"bookingId\": \"3a4b5c6d-7e8f-4901-a2b3-c4d5e6f7a8b9\",\n    \"amount\": 1500\n  }\n}"
+            }
+          ]
         },
         {
           "name": "Stripe Webhook",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// ---- FieldOps shared assertions + variable capture ----",
+                  "function decodeJwt(token) {\n    try {\n        var part = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');\n        while (part.length % 4) { part += '='; }\n        return JSON.parse(decodeURIComponent(escape(atob(part))));\n    } catch (e) {\n        return null;\n    }\n}\n\nfunction captureToken(token, key) {\n  if (!token) return;\n  pm.collectionVariables.set(key, token);\n  const payload = decodeJwt(token);\n  if (!payload) return;\n  if (payload.userId) pm.collectionVariables.set('userId', payload.userId);\n  if (payload.role) pm.collectionVariables.set('userRole', payload.role);\n  if (payload.role === 'ADMIN') pm.collectionVariables.set('adminAccessToken', token);\n  if (payload.role === 'TECHNICIAN') pm.collectionVariables.set('technicianAccessToken', token);\n  if (payload.role === 'CUSTOMER') pm.collectionVariables.set('customerAccessToken', token);\n}",
+                  "",
+                  "const body = pm.response.json();",
+                  "",
+                  "pm.test(\"Response status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Envelope success is true\", function () {",
+                  "    pm.expect(body.success, \"success\").to.be.true;",
+                  "});",
+                  ""
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -973,118 +2586,160 @@
                 "value": "application/json"
               },
               {
-                "key": "Stripe-Signature",
-                "value": "t=timestamp,v1=signature"
+                "key": "stripe-signature",
+                "value": "{{stripeSignature}}",
+                "description": "Signature from the Stripe-Secret header. Generated for you by the collection pre-request script."
               }
             ],
+            "auth": {
+              "type": "noauth"
+            },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"id\": \"evt_test_webhook\",\n  \"object\": \"event\",\n  \"type\": \"checkout.session.completed\",\n  \"data\": {\n    \"object\": {\n      \"id\": \"cs_test_123\",\n      \"metadata\": {\n        \"bookingId\": \"booking-uuid\",\n        \"customerId\": \"customer-uuid\"\n      },\n      \"payment_intent\": \"pi_test_123\",\n      \"payment_status\": \"paid\"\n    }\n  }\n}"
+              "raw": "{\n  \"id\": \"evt_test_webhook\",\n  \"object\": \"event\",\n  \"type\": \"checkout.session.completed\",\n  \"data\": {\n    \"object\": {\n      \"id\": \"{{sessionId}}\",\n      \"object\": \"checkout.session\",\n      \"payment_status\": \"paid\",\n      \"payment_intent\": \"pi_test_123\",\n      \"metadata\": {\n        \"bookingId\": \"{{bookingId}}\",\n        \"customerId\": \"{{userId}}\"\n      }\n    }\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/payments/webhook",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "payments", "webhook"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "payments",
+                "webhook"
+              ]
             },
-            "description": "Stripe webhook. Requires a valid Stripe-Signature header. Best tested via Stripe CLI: stripe listen --forward-to localhost:5000/api/v1/payments/webhook"
+            "description": "Called by Stripe, not by clients. Handled on a dedicated `express.raw` mount in `src/app.ts`, which runs before the JSON body parser so the raw payload stays byte-exact for signature verification. A missing `stripe-signature` header returns 400.\n\nHandles `checkout.session.completed` (payment -> PAID, stamps `paidAt`) and `payment_intent.payment_failed` (payment -> FAILED). The upsert is keyed on the unique `bookingId`, so replays are idempotent.\n\nThe signature must match `STRIPE_WEBHOOK_SECRET`. Hand-rolled payloads fail verification, so use `stripe listen --forward-to localhost:5000/api/v1/payments/webhook` for a real test."
           },
           "response": []
         },
         {
           "name": "Get My Payments",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// ---- FieldOps shared assertions + variable capture ----",
+                  "function decodeJwt(token) {\n    try {\n        var part = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');\n        while (part.length % 4) { part += '='; }\n        return JSON.parse(decodeURIComponent(escape(atob(part))));\n    } catch (e) {\n        return null;\n    }\n}\n\nfunction captureToken(token, key) {\n  if (!token) return;\n  pm.collectionVariables.set(key, token);\n  const payload = decodeJwt(token);\n  if (!payload) return;\n  if (payload.userId) pm.collectionVariables.set('userId', payload.userId);\n  if (payload.role) pm.collectionVariables.set('userRole', payload.role);\n  if (payload.role === 'ADMIN') pm.collectionVariables.set('adminAccessToken', token);\n  if (payload.role === 'TECHNICIAN') pm.collectionVariables.set('technicianAccessToken', token);\n  if (payload.role === 'CUSTOMER') pm.collectionVariables.set('customerAccessToken', token);\n}",
+                  "",
+                  "const body = pm.response.json();",
+                  "",
+                  "pm.test(\"Response status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Envelope success is true\", function () {",
+                  "    pm.expect(body.success, \"success\").to.be.true;",
+                  "});",
+                  "",
+                  "const rows = Array.isArray(body.data) ? body.data : [];",
+                  "if (rows.length && rows[0].id) pm.collectionVariables.set(\"paymentId\", rows[0].id);"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
             "header": [],
+            "auth": {
+              "type": "inherit"
+            },
             "url": {
               "raw": "{{baseUrl}}/api/v1/payments/my?status=&page=1&limit=10",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "payments", "my"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "payments",
+                "my"
+              ],
               "query": [
                 {
                   "key": "status",
                   "value": "",
-                  "description": "PENDING, PAID, FAILED, CANCELLED, REFUNDED"
+                  "description": "PENDING | PAID | FAILED | CANCELLED | REFUNDED",
+                  "disabled": false
                 },
                 {
                   "key": "page",
                   "value": "1",
-                  "description": "Page number"
+                  "description": "Positive integer, default 1.",
+                  "disabled": false
                 },
                 {
                   "key": "limit",
                   "value": "10",
-                  "description": "Items per page (max 100)"
+                  "description": "Positive integer, max 100, default 10.",
+                  "disabled": false
                 }
               ]
             },
-            "description": "Requires CUSTOMER role"
+            "description": "Requires `CUSTOMER`. Paginated payment history with the related booking expanded. Captures the first payment id into `{{paymentId}}`."
           },
           "response": []
         },
         {
           "name": "Get Payment By ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// ---- FieldOps shared assertions + variable capture ----",
+                  "function decodeJwt(token) {\n    try {\n        var part = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');\n        while (part.length % 4) { part += '='; }\n        return JSON.parse(decodeURIComponent(escape(atob(part))));\n    } catch (e) {\n        return null;\n    }\n}\n\nfunction captureToken(token, key) {\n  if (!token) return;\n  pm.collectionVariables.set(key, token);\n  const payload = decodeJwt(token);\n  if (!payload) return;\n  if (payload.userId) pm.collectionVariables.set('userId', payload.userId);\n  if (payload.role) pm.collectionVariables.set('userRole', payload.role);\n  if (payload.role === 'ADMIN') pm.collectionVariables.set('adminAccessToken', token);\n  if (payload.role === 'TECHNICIAN') pm.collectionVariables.set('technicianAccessToken', token);\n  if (payload.role === 'CUSTOMER') pm.collectionVariables.set('customerAccessToken', token);\n}",
+                  "",
+                  "const body = pm.response.json();",
+                  "",
+                  "pm.test(\"Response status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Envelope success is true\", function () {",
+                  "    pm.expect(body.success, \"success\").to.be.true;",
+                  "});",
+                  "",
+                  "if (body.data && body.data.id) pm.collectionVariables.set(\"paymentId\", body.data.id);"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
             "header": [],
+            "auth": {
+              "type": "inherit"
+            },
             "url": {
               "raw": "{{baseUrl}}/api/v1/payments/:id",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "payments", ":id"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "payments",
+                ":id"
+              ],
               "variable": [
                 {
                   "key": "id",
-                  "value": "payment-uuid"
+                  "value": "{{paymentId}}",
+                  "type": "string"
                 }
               ]
             },
-            "description": "Requires CUSTOMER role. Can only view own payment."
-          },
-          "response": []
-        }
-      ]
-    },
-    {
-      "name": "Analytics",
-      "item": [
-        {
-          "name": "Admin Analytics",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/analytics/admin",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "analytics", "admin"]
-            },
-            "description": "Requires ADMIN role. Totals across the whole platform: technicians, customers, services, bookings, revenue, refunds."
-          },
-          "response": []
-        },
-        {
-          "name": "Customer Analytics",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/analytics/customer",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "analytics", "customer"]
-            },
-            "description": "Requires CUSTOMER role. Own bookings breakdown and total amount spent."
-          },
-          "response": []
-        },
-        {
-          "name": "Technician Analytics",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/analytics/technician",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "analytics", "technician"]
-            },
-            "description": "Requires TECHNICIAN role. Own availability slots, bookings breakdown, total earnings, rating."
+            "description": "Requires `CUSTOMER`, and only for a payment on one of the caller's own bookings. Returns the payment with the full booking relation graph."
           },
           "response": []
         }
@@ -1092,128 +2747,471 @@
     },
     {
       "name": "Reviews",
+      "description": "Reviews under `/api/v1/reviews`. A review requires the booking to be COMPLETED and paid, and there can be only one per booking. Every write recalculates the technician's aggregate `rating` and `totalReviews`.",
       "item": [
         {
           "name": "Create Review",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// ---- FieldOps shared assertions + variable capture ----",
+                  "function decodeJwt(token) {\n    try {\n        var part = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');\n        while (part.length % 4) { part += '='; }\n        return JSON.parse(decodeURIComponent(escape(atob(part))));\n    } catch (e) {\n        return null;\n    }\n}\n\nfunction captureToken(token, key) {\n  if (!token) return;\n  pm.collectionVariables.set(key, token);\n  const payload = decodeJwt(token);\n  if (!payload) return;\n  if (payload.userId) pm.collectionVariables.set('userId', payload.userId);\n  if (payload.role) pm.collectionVariables.set('userRole', payload.role);\n  if (payload.role === 'ADMIN') pm.collectionVariables.set('adminAccessToken', token);\n  if (payload.role === 'TECHNICIAN') pm.collectionVariables.set('technicianAccessToken', token);\n  if (payload.role === 'CUSTOMER') pm.collectionVariables.set('customerAccessToken', token);\n}",
+                  "",
+                  "const body = pm.response.json();",
+                  "",
+                  "pm.test(\"Response status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Envelope success is true\", function () {",
+                  "    pm.expect(body.success, \"success\").to.be.true;",
+                  "});",
+                  "",
+                  "if (body.data && body.data.id) pm.collectionVariables.set(\"reviewId\", body.data.id);"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
+            "header": [],
+            "auth": {
+              "type": "inherit"
+            },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"bookingId\": \"booking-uuid\",\n  \"rating\": 5,\n  \"comment\": \"Excellent service!\"\n}"
+              "raw": "{\n  \"bookingId\": \"{{bookingId}}\",\n  \"rating\": 5,\n  \"comment\": \"Arrived on time, diagnosed the compressor fault quickly and left the unit spotless.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/reviews",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "reviews"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reviews"
+              ]
             },
-            "description": "Requires CUSTOMER role. Booking must be COMPLETED and PAID. One review per booking."
+            "description": "Requires `CUSTOMER`. `bookingId` must be a UUID for one of your own COMPLETED bookings whose payment is PAID, and it must not already be reviewed. `rating` is an integer 1-5; `comment` is optional up to 1000 chars.\n\nCaptures `{{reviewId}}`."
           },
           "response": []
         },
         {
           "name": "Get Technician Reviews",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// ---- FieldOps shared assertions + variable capture ----",
+                  "function decodeJwt(token) {\n    try {\n        var part = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');\n        while (part.length % 4) { part += '='; }\n        return JSON.parse(decodeURIComponent(escape(atob(part))));\n    } catch (e) {\n        return null;\n    }\n}\n\nfunction captureToken(token, key) {\n  if (!token) return;\n  pm.collectionVariables.set(key, token);\n  const payload = decodeJwt(token);\n  if (!payload) return;\n  if (payload.userId) pm.collectionVariables.set('userId', payload.userId);\n  if (payload.role) pm.collectionVariables.set('userRole', payload.role);\n  if (payload.role === 'ADMIN') pm.collectionVariables.set('adminAccessToken', token);\n  if (payload.role === 'TECHNICIAN') pm.collectionVariables.set('technicianAccessToken', token);\n  if (payload.role === 'CUSTOMER') pm.collectionVariables.set('customerAccessToken', token);\n}",
+                  "",
+                  "const body = pm.response.json();",
+                  "",
+                  "pm.test(\"Response status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Envelope success is true\", function () {",
+                  "    pm.expect(body.success, \"success\").to.be.true;",
+                  "});",
+                  "",
+                  "const rows = Array.isArray(body.data) ? body.data : [];",
+                  "if (rows.length && rows[0].id) pm.collectionVariables.set(\"reviewId\", rows[0].id);"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
             "header": [],
+            "auth": {
+              "type": "noauth"
+            },
             "url": {
               "raw": "{{baseUrl}}/api/v1/reviews/technician/:technicianId?page=1&limit=10",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "reviews", "technician", ":technicianId"],
-              "variable": [
-                {
-                  "key": "technicianId",
-                  "value": "technician-profile-uuid"
-                }
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reviews",
+                "technician",
+                ":technicianId"
               ],
               "query": [
                 {
                   "key": "page",
                   "value": "1",
-                  "description": "Page number"
+                  "description": "Integer >= 1, default 1.",
+                  "disabled": false
                 },
                 {
                   "key": "limit",
                   "value": "10",
-                  "description": "Items per page (max 100)"
+                  "description": "Integer 1-100, default 10.",
+                  "disabled": false
+                }
+              ],
+              "variable": [
+                {
+                  "key": "technicianId",
+                  "value": "{{technicianId}}",
+                  "type": "string"
                 }
               ]
             },
-            "description": "Public endpoint. Paginated reviews for a technician, ordered newest first."
+            "description": "Public, paginated reviews for a technician with the reviewer expanded. Captures the first review id into `{{reviewId}}`."
           },
           "response": []
         },
         {
           "name": "Get Review By ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// ---- FieldOps shared assertions + variable capture ----",
+                  "function decodeJwt(token) {\n    try {\n        var part = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');\n        while (part.length % 4) { part += '='; }\n        return JSON.parse(decodeURIComponent(escape(atob(part))));\n    } catch (e) {\n        return null;\n    }\n}\n\nfunction captureToken(token, key) {\n  if (!token) return;\n  pm.collectionVariables.set(key, token);\n  const payload = decodeJwt(token);\n  if (!payload) return;\n  if (payload.userId) pm.collectionVariables.set('userId', payload.userId);\n  if (payload.role) pm.collectionVariables.set('userRole', payload.role);\n  if (payload.role === 'ADMIN') pm.collectionVariables.set('adminAccessToken', token);\n  if (payload.role === 'TECHNICIAN') pm.collectionVariables.set('technicianAccessToken', token);\n  if (payload.role === 'CUSTOMER') pm.collectionVariables.set('customerAccessToken', token);\n}",
+                  "",
+                  "const body = pm.response.json();",
+                  "",
+                  "pm.test(\"Response status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Envelope success is true\", function () {",
+                  "    pm.expect(body.success, \"success\").to.be.true;",
+                  "});",
+                  "",
+                  "if (body.data && body.data.id) pm.collectionVariables.set(\"reviewId\", body.data.id);"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
             "header": [],
+            "auth": {
+              "type": "noauth"
+            },
             "url": {
               "raw": "{{baseUrl}}/api/v1/reviews/:id",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "reviews", ":id"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reviews",
+                ":id"
+              ],
               "variable": [
                 {
                   "key": "id",
-                  "value": "review-uuid"
+                  "value": "{{reviewId}}",
+                  "type": "string"
                 }
               ]
             },
-            "description": "Public endpoint. Returns a single review with booking, customer and technician info."
+            "description": "Public lookup of a single review. Captures `{{reviewId}}`."
           },
           "response": []
         },
         {
           "name": "Update Review",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// ---- FieldOps shared assertions + variable capture ----",
+                  "function decodeJwt(token) {\n    try {\n        var part = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');\n        while (part.length % 4) { part += '='; }\n        return JSON.parse(decodeURIComponent(escape(atob(part))));\n    } catch (e) {\n        return null;\n    }\n}\n\nfunction captureToken(token, key) {\n  if (!token) return;\n  pm.collectionVariables.set(key, token);\n  const payload = decodeJwt(token);\n  if (!payload) return;\n  if (payload.userId) pm.collectionVariables.set('userId', payload.userId);\n  if (payload.role) pm.collectionVariables.set('userRole', payload.role);\n  if (payload.role === 'ADMIN') pm.collectionVariables.set('adminAccessToken', token);\n  if (payload.role === 'TECHNICIAN') pm.collectionVariables.set('technicianAccessToken', token);\n  if (payload.role === 'CUSTOMER') pm.collectionVariables.set('customerAccessToken', token);\n}",
+                  "",
+                  "const body = pm.response.json();",
+                  "",
+                  "pm.test(\"Response status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Envelope success is true\", function () {",
+                  "    pm.expect(body.success, \"success\").to.be.true;",
+                  "});",
+                  "",
+                  "if (body.data && body.data.id) pm.collectionVariables.set(\"reviewId\", body.data.id);"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "PATCH",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
+            "header": [],
+            "auth": {
+              "type": "inherit"
+            },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"rating\": 4,\n  \"comment\": \"Good service but arrived a bit late.\"\n}"
+              "raw": "{\n  \"rating\": 4,\n  \"comment\": \"Good work overall, though the technician arrived about 30 minutes late.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/reviews/:id",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "reviews", ":id"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reviews",
+                ":id"
+              ],
               "variable": [
                 {
                   "key": "id",
-                  "value": "review-uuid"
+                  "value": "{{reviewId}}",
+                  "type": "string"
                 }
               ]
             },
-            "description": "Requires CUSTOMER role. Can only update your own review. Both fields optional."
+            "description": "Requires `CUSTOMER`, and only on your own review. Both fields optional. The technician aggregate rating is recomputed from the remaining reviews."
           },
           "response": []
         },
         {
           "name": "Delete Review",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// ---- FieldOps shared assertions + variable capture ----",
+                  "function decodeJwt(token) {\n    try {\n        var part = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');\n        while (part.length % 4) { part += '='; }\n        return JSON.parse(decodeURIComponent(escape(atob(part))));\n    } catch (e) {\n        return null;\n    }\n}\n\nfunction captureToken(token, key) {\n  if (!token) return;\n  pm.collectionVariables.set(key, token);\n  const payload = decodeJwt(token);\n  if (!payload) return;\n  if (payload.userId) pm.collectionVariables.set('userId', payload.userId);\n  if (payload.role) pm.collectionVariables.set('userRole', payload.role);\n  if (payload.role === 'ADMIN') pm.collectionVariables.set('adminAccessToken', token);\n  if (payload.role === 'TECHNICIAN') pm.collectionVariables.set('technicianAccessToken', token);\n  if (payload.role === 'CUSTOMER') pm.collectionVariables.set('customerAccessToken', token);\n}",
+                  "",
+                  "const body = pm.response.json();",
+                  "",
+                  "pm.test(\"Response status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Envelope success is true\", function () {",
+                  "    pm.expect(body.success, \"success\").to.be.true;",
+                  "});",
+                  ""
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "DELETE",
             "header": [],
+            "auth": {
+              "type": "inherit"
+            },
             "url": {
               "raw": "{{baseUrl}}/api/v1/reviews/:id",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "reviews", ":id"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "reviews",
+                ":id"
+              ],
               "variable": [
                 {
                   "key": "id",
-                  "value": "review-uuid"
+                  "value": "{{reviewId}}",
+                  "type": "string"
                 }
               ]
             },
-            "description": "Requires CUSTOMER role. Can only delete your own review. Technician rating is recalculated after deletion."
+            "description": "Requires `CUSTOMER`, and only on your own review. Deleting recalculates the technician's aggregate rating and review count."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Analytics",
+      "description": "Read-only dashboard aggregates under `/api/v1/analytics`. Each endpoint is guarded to exactly one role, so sign in as that role before running it. Decimal columns (`totalAmount`, `amount`) are aggregated to plain numbers in the response.",
+      "item": [
+        {
+          "name": "Admin Analytics",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// ---- FieldOps shared assertions + variable capture ----",
+                  "function decodeJwt(token) {\n    try {\n        var part = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');\n        while (part.length % 4) { part += '='; }\n        return JSON.parse(decodeURIComponent(escape(atob(part))));\n    } catch (e) {\n        return null;\n    }\n}\n\nfunction captureToken(token, key) {\n  if (!token) return;\n  pm.collectionVariables.set(key, token);\n  const payload = decodeJwt(token);\n  if (!payload) return;\n  if (payload.userId) pm.collectionVariables.set('userId', payload.userId);\n  if (payload.role) pm.collectionVariables.set('userRole', payload.role);\n  if (payload.role === 'ADMIN') pm.collectionVariables.set('adminAccessToken', token);\n  if (payload.role === 'TECHNICIAN') pm.collectionVariables.set('technicianAccessToken', token);\n  if (payload.role === 'CUSTOMER') pm.collectionVariables.set('customerAccessToken', token);\n}",
+                  "",
+                  "const body = pm.response.json();",
+                  "",
+                  "pm.test(\"Response status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Envelope success is true\", function () {",
+                  "    pm.expect(body.success, \"success\").to.be.true;",
+                  "});",
+                  "",
+                  "pm.test(\"Revenue is numeric\", function () {",
+                  "    pm.expect(body.data.totalRevenue).to.be.a(\"number\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "inherit"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/analytics/admin",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "analytics",
+                "admin"
+              ]
+            },
+            "description": "Requires `ADMIN`. Platform totals: technician and customer counts, service counts, booking counts by status, and revenue / refunds summed over PAID and REFUNDED payments."
+          },
+          "response": [
+            {
+              "name": "Success",
+              "originalRequest": {},
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": true,\n  \"statusCode\": 200,\n  \"message\": \"Admin analytics retrieved successfully\",\n  \"data\": {\n    \"totalTechnicians\": 4,\n    \"totalCustomers\": 12,\n    \"totalServices\": 9,\n    \"totalActiveServices\": 8,\n    \"totalBookings\": 27,\n    \"totalPendingBookings\": 5,\n    \"totalCompletedBookings\": 16,\n    \"totalCancelledBookings\": 3,\n    \"totalRevenue\": 24500,\n    \"totalRefunded\": 1500\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Customer Analytics",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// ---- FieldOps shared assertions + variable capture ----",
+                  "function decodeJwt(token) {\n    try {\n        var part = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');\n        while (part.length % 4) { part += '='; }\n        return JSON.parse(decodeURIComponent(escape(atob(part))));\n    } catch (e) {\n        return null;\n    }\n}\n\nfunction captureToken(token, key) {\n  if (!token) return;\n  pm.collectionVariables.set(key, token);\n  const payload = decodeJwt(token);\n  if (!payload) return;\n  if (payload.userId) pm.collectionVariables.set('userId', payload.userId);\n  if (payload.role) pm.collectionVariables.set('userRole', payload.role);\n  if (payload.role === 'ADMIN') pm.collectionVariables.set('adminAccessToken', token);\n  if (payload.role === 'TECHNICIAN') pm.collectionVariables.set('technicianAccessToken', token);\n  if (payload.role === 'CUSTOMER') pm.collectionVariables.set('customerAccessToken', token);\n}",
+                  "",
+                  "const body = pm.response.json();",
+                  "",
+                  "pm.test(\"Response status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Envelope success is true\", function () {",
+                  "    pm.expect(body.success, \"success\").to.be.true;",
+                  "});",
+                  ""
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "inherit"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/analytics/customer",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "analytics",
+                "customer"
+              ]
+            },
+            "description": "Requires `CUSTOMER`. Booking totals for the caller, upcoming / completed / cancelled counts, and total spent and refunded."
+          },
+          "response": []
+        },
+        {
+          "name": "Technician Analytics",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// ---- FieldOps shared assertions + variable capture ----",
+                  "function decodeJwt(token) {\n    try {\n        var part = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');\n        while (part.length % 4) { part += '='; }\n        return JSON.parse(decodeURIComponent(escape(atob(part))));\n    } catch (e) {\n        return null;\n    }\n}\n\nfunction captureToken(token, key) {\n  if (!token) return;\n  pm.collectionVariables.set(key, token);\n  const payload = decodeJwt(token);\n  if (!payload) return;\n  if (payload.userId) pm.collectionVariables.set('userId', payload.userId);\n  if (payload.role) pm.collectionVariables.set('userRole', payload.role);\n  if (payload.role === 'ADMIN') pm.collectionVariables.set('adminAccessToken', token);\n  if (payload.role === 'TECHNICIAN') pm.collectionVariables.set('technicianAccessToken', token);\n  if (payload.role === 'CUSTOMER') pm.collectionVariables.set('customerAccessToken', token);\n}",
+                  "",
+                  "const body = pm.response.json();",
+                  "",
+                  "pm.test(\"Response status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Envelope success is true\", function () {",
+                  "    pm.expect(body.success, \"success\").to.be.true;",
+                  "});",
+                  ""
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "inherit"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/analytics/technician",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "analytics",
+                "technician"
+              ]
+            },
+            "description": "Requires `TECHNICIAN`. Availability and slot counts, bookings by status, earnings and refunds, and the current rating and review count. Requires a technician profile to exist — run Create Technician Profile first."
           },
           "response": []
         }
