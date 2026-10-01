@@ -22,6 +22,7 @@ app.use(
   cors({
     origin: [
       "http://localhost:5000",
+      "http://localhost:3000",
       "https://fieldpro-backend-iota.vercel.app",
     ],
     credentials: true,
