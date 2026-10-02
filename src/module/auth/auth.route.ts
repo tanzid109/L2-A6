@@ -56,5 +56,6 @@ router.patch(
   validateRequest(UserValidation.UpdateProfileSchema),
   AuthController.updateProfile,
 );
+router.post("/logout", AuthController.logout);
 
 export const AuthRoutes = router;

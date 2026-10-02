@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "fieldops-api-collection",
     "name": "FieldOps System Backend",
-    "description": "API collection for the FieldOps backend — Express 5 + Prisma 7 + PostgreSQL, with Redis-backed OTP auth, Cloudinary uploads and Stripe payments.\n\n**Getting started**\n1. Set `baseUrl` (default `http://localhost:5000`, matching `PORT` in `.env`).\n2. Run the collection-level pre-request script once — it generates `{{futureDate}}`, `{{futureDateIso}}` and `{{stripeSignature}}` for you.\n3. Hit Login. The test scripts decode the JWT and fill in `{{accessToken}}` plus the role-scoped `{{adminAccessToken}}` / `{{technicianAccessToken}}` / `{{customerAccessToken}}`, so switch roles by logging in as that role.\n4. IDs are chained automatically: Get All Services sets `{{serviceId}}`, Get All Technicians sets `{{technicianId}}`, Create Availability sets `{{availabilityId}}`, Create Booking sets `{{bookingId}}`, and so on. The booking, payment and review flows each need their matching role token.\n\n**Conventions**\n- Every response uses the envelope `{ success, statusCode, message, data, meta? }`; paginated endpoints add `meta: { page, limit, total, totalPages }`.\n- `Content-Type: application/json` on JSON bodies. Endpoints with file uploads use multipart/form-data, so they deliberately carry no `Content-Type` header — Postman sets the boundary itself.\n- Query filters that look boolean (`isActive`, `isBooked`, `isAvailable`) are validated as the **strings** `\"true\"` / `\"false\"`, while `isActive` in an Update Service body is a real boolean.\n\n**Known behaviour**\n`globalErrorHandler` computes a `statusCode` but always responds with HTTP 500, so auth failures, role violations, Zod validation failures and `AppError`s such as 404 / 409 all arrive as 500 with the real reason in `message` (in `NODE_ENV=development`). The one exception is unmatched routes, which return a genuine 404. Assertions here check for success rather than specific error codes.",
+    "description": "API collection for the FieldOps backend — Express 5 + Prisma 7 + PostgreSQL, with Redis-backed OTP auth, Cloudinary uploads and Stripe payments.\n\n**Getting started**\n1. Set `baseUrl` (default `http://localhost:5000`, matching `PORT` in `.env`).\n2. Run the collection-level pre-request script once — it generates `{{futureDate}}`, `{{futureDateIso}}` and `{{stripeSignature}}` for you.\n3. Hit Login. The test scripts decode the JWT and fill in `{{accessToken}}` plus the role-scoped `{{adminAccessToken}}` / `{{technicianAccessToken}}` / `{{customerAccessToken}}`, so switch roles by logging in as that role.\n4. IDs are chained automatically: Get All Services sets `{{serviceId}}`, Get All Technicians sets `{{technicianId}}`, Create Availability sets `{{availabilityId}}`, Create Booking sets `{{bookingId}}`, and so on. The booking, payment and review flows each need their matching role token.\n5. Technicians cannot self-register. Run the Technician Application folder: Apply As Technician, then review from Get Applications and Approve or Reject. The decision is emailed to the applicant, and the approval response includes a token pair for the new technician.\n\n**Conventions**\n- Every response uses the envelope `{ success, statusCode, message, data, meta? }`; paginated endpoints add `meta: { page, limit, total, totalPages }`.\n- `Content-Type: application/json` on JSON bodies. Endpoints with file uploads use multipart/form-data, so they deliberately carry no `Content-Type` header — Postman sets the boundary itself.\n- Query filters that look boolean (`isActive`, `isBooked`, `isAvailable`) are validated as the **strings** `\"true\"` / `\"false\"`, while `isActive` in an Update Service body is a real boolean.\n\n**Known behaviour**\n`globalErrorHandler` computes a `statusCode` but always responds with HTTP 500, so auth failures, role violations, Zod validation failures and `AppError`s such as 404 / 409 all arrive as 500 with the real reason in `message` (in `NODE_ENV=development`). The one exception is unmatched routes, which return a genuine 404. Assertions here check for success rather than specific error codes.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -136,7 +136,13 @@
       "key": "otp",
       "value": "",
       "type": "string",
-      "description": "6-digit OTP from the email. Expires after 5 minutes."
+      "description": "6-digit OTP from the auth email. Expires after 5 minutes."
+    },
+    {
+      "key": "applicationId",
+      "value": "",
+      "type": "string",
+      "description": "TechnicianApplication id — set by Apply As Technician or Get Applications."
     },
     {
       "key": "futureDate",
@@ -742,6 +748,62 @@
           "response": []
         },
         {
+          "name": "Logout",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// ---- FieldOps shared assertions + variable capture ----",
+                  "function decodeJwt(token) {\n    try {\n        var part = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');\n        while (part.length % 4) { part += '='; }\n        return JSON.parse(decodeURIComponent(escape(atob(part))));\n    } catch (e) {\n        return null;\n    }\n}\n\nfunction captureToken(token, key) {\n  if (!token) return;\n  pm.collectionVariables.set(key, token);\n  const payload = decodeJwt(token);\n  if (!payload) return;\n  if (payload.userId) pm.collectionVariables.set('userId', payload.userId);\n  if (payload.role) pm.collectionVariables.set('userRole', payload.role);\n  if (payload.role === 'ADMIN') pm.collectionVariables.set('adminAccessToken', token);\n  if (payload.role === 'TECHNICIAN') pm.collectionVariables.set('technicianAccessToken', token);\n  if (payload.role === 'CUSTOMER') pm.collectionVariables.set('customerAccessToken', token);\n}",
+                  "",
+                  "const body = pm.response.json();",
+                  "",
+                  "pm.test(\"Response status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Envelope success is true\", function () {",
+                  "    pm.expect(body.success, \"success\").to.be.true;",
+                  "});",
+                  "",
+                  "pm.collectionVariables.clear();",
+                  "pm.test(\"Tokens cleared\", function () {",
+                  "    pm.expect(pm.collectionVariables.get(\"accessToken\")).to.be.undefined;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "auth": {
+              "type": "inherit"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/logout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "logout"
+              ]
+            },
+            "description": "Clears the `accessToken` and `refreshToken` cookies. No auth required and nothing is invalidated server-side — the JWTs remain valid until they expire, so treat this as clearing client state rather than revocation."
+          },
+          "response": []
+        },
+        {
           "name": "Get Me",
           "event": [
             {
@@ -876,6 +938,473 @@
             "description": "Requires `CUSTOMER`, `TECHNICIAN` or `ADMIN`.\n\nmultipart/form-data. `name` (2-100 chars) and `phone` (6-20 chars) are optional; `avatar` is an optional image uploaded to Cloudinary. Uploading a new avatar deletes the previous Cloudinary asset.\n\nChanging `name` invalidates your current access token because the middleware matches the JWT name against the stored user."
           },
           "response": []
+        }
+      ]
+    },
+    {
+      "name": "Technician Application",
+      "description": "Apply-then-approve flow for becoming a technician.\n\n**How it fits together:** a registered `CUSTOMER` submits an application with a resume, and it is stored as `PENDING`. No OTP step — the applicant just waits. An `ADMIN` reviews the queue and approves or rejects, and the applicant is notified by email either way.\n\nApproval promotes the user to `TECHNICIAN` **and** creates their `TechnicianProfile` in one transaction, then returns a fresh token pair. That last part matters: the auth middleware matches the JWT against the database on `id` + `email` + `name` + `role`, so changing the role invalidates the token you approved with. Use the tokens from the approval response.\n\nA rejected applicant stays a `CUSTOMER`, keeps working normally, and can read the reason via Get My Application.",
+      "item": [
+        {
+          "name": "Apply As Technician",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// ---- FieldOps shared assertions + variable capture ----",
+                  "function decodeJwt(token) {\n    try {\n        var part = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');\n        while (part.length % 4) { part += '='; }\n        return JSON.parse(decodeURIComponent(escape(atob(part))));\n    } catch (e) {\n        return null;\n    }\n}\n\nfunction captureToken(token, key) {\n  if (!token) return;\n  pm.collectionVariables.set(key, token);\n  const payload = decodeJwt(token);\n  if (!payload) return;\n  if (payload.userId) pm.collectionVariables.set('userId', payload.userId);\n  if (payload.role) pm.collectionVariables.set('userRole', payload.role);\n  if (payload.role === 'ADMIN') pm.collectionVariables.set('adminAccessToken', token);\n  if (payload.role === 'TECHNICIAN') pm.collectionVariables.set('technicianAccessToken', token);\n  if (payload.role === 'CUSTOMER') pm.collectionVariables.set('customerAccessToken', token);\n}",
+                  "",
+                  "const body = pm.response.json();",
+                  "",
+                  "pm.test(\"Response status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Envelope success is true\", function () {",
+                  "    pm.expect(body.success, \"success\").to.be.true;",
+                  "});",
+                  "",
+                  "if (body.data && body.data.id) pm.collectionVariables.set(\"applicationId\", body.data.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "auth": {
+              "type": "inherit"
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "specialization",
+                  "value": "HVAC",
+                  "type": "text",
+                  "description": "Required. 2-100 characters."
+                },
+                {
+                  "key": "experience",
+                  "value": "8",
+                  "type": "text",
+                  "description": "Required. Integer, 0-50 years."
+                },
+                {
+                  "key": "hourlyRate",
+                  "value": "1200",
+                  "type": "text",
+                  "description": "Required. Number greater than 0."
+                },
+                {
+                  "key": "bio",
+                  "value": "Certified HVAC technician with 8 years of experience in residential and commercial systems.",
+                  "type": "text",
+                  "description": "Optional. 10-500 characters."
+                },
+                {
+                  "key": "resume",
+                  "type": "file",
+                  "src": [],
+                  "description": "Required. PDF or image — your CV or certification."
+                },
+                {
+                  "key": "additionalFiles",
+                  "type": "file",
+                  "src": [],
+                  "description": "Optional, up to 10 files. Certificates, references, ID."
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/technicians/application",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "technicians",
+                "application"
+              ]
+            },
+            "description": "Requires `CUSTOMER`. multipart/form-data.\n\nRequires an account with a verified email (run Verify Email in the Auth folder first) and no existing profile or application. `resume` is a required file; `additionalFiles` takes up to 10 more.\n\nValidation: `specialization` 2-100 chars, `experience` integer 0-50, `hourlyRate` > 0, `bio` optional 10-500 chars. Returns the stored application with status `PENDING`. No email is sent yet — the applicant hears back only when an admin decides.\n\nCaptures `{{applicationId}}`, which the admin review step needs."
+          },
+          "response": [
+            {
+              "name": "Already applied",
+              "originalRequest": {},
+              "status": "Conflict",
+              "code": 409,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": false,\n  \"statusCode\": 409,\n  \"name\": \"Internal Server Error\",\n  \"message\": \"You already have a pending technician application\"\n}"
+            },
+            {
+              "name": "Email not verified",
+              "originalRequest": {},
+              "status": "Bad Request",
+              "code": 409,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": false,\n  \"statusCode\": 400,\n  \"name\": \"Internal Server Error\",\n  \"message\": \"Please verify your email before applying\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get My Application",
+          "event": [],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "inherit"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/technicians/application/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "technicians",
+                "application",
+                "me"
+              ]
+            },
+            "description": "Requires `CUSTOMER`. Returns the caller's own application with its status, rejection reason if any, and review timestamp — so the frontend can show \"under review\" or surface the reason it was turned down.\n\nOne application per account. A rejected applicant is told to wait for a future reapply allowance rather than resubmitting immediately."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Applications",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// ---- FieldOps shared assertions + variable capture ----",
+                  "function decodeJwt(token) {\n    try {\n        var part = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');\n        while (part.length % 4) { part += '='; }\n        return JSON.parse(decodeURIComponent(escape(atob(part))));\n    } catch (e) {\n        return null;\n    }\n}\n\nfunction captureToken(token, key) {\n  if (!token) return;\n  pm.collectionVariables.set(key, token);\n  const payload = decodeJwt(token);\n  if (!payload) return;\n  if (payload.userId) pm.collectionVariables.set('userId', payload.userId);\n  if (payload.role) pm.collectionVariables.set('userRole', payload.role);\n  if (payload.role === 'ADMIN') pm.collectionVariables.set('adminAccessToken', token);\n  if (payload.role === 'TECHNICIAN') pm.collectionVariables.set('technicianAccessToken', token);\n  if (payload.role === 'CUSTOMER') pm.collectionVariables.set('customerAccessToken', token);\n}",
+                  "",
+                  "const body = pm.response.json();",
+                  "",
+                  "pm.test(\"Response status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Envelope success is true\", function () {",
+                  "    pm.expect(body.success, \"success\").to.be.true;",
+                  "});",
+                  "",
+                  "const rows = Array.isArray(body.data) ? body.data : [];",
+                  "if (rows.length && rows[0].id) pm.collectionVariables.set(\"applicationId\", rows[0].id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "inherit"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/technicians/applications?status=PENDING&search=&page=1&limit=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "technicians",
+                "applications"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "PENDING",
+                  "description": "PENDING | APPROVED | REJECTED",
+                  "disabled": false
+                },
+                {
+                  "key": "search",
+                  "value": "",
+                  "description": "Matches name, email, or specialization.",
+                  "disabled": false
+                },
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Positive integer, default 1.",
+                  "disabled": false
+                },
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "description": "Positive integer, max 100, default 10.",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "Requires `ADMIN`. The review queue, newest first, with the applicant's user record. Filter to `PENDING` for the default inbox.\n\nCaptures the first application id into `{{applicationId}}`."
+          },
+          "response": [
+            {
+              "name": "Success",
+              "originalRequest": {},
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": true,\n  \"statusCode\": 200,\n  \"message\": \"Applications retrieved successfully\",\n  \"data\": [\n    {\n      \"id\": \"7c3d9e11-5a2b-4f18-9c6d-2e1f0a9b8c7d\",\n      \"userId\": \"9c1f0f1e-0a1b-4c2d-8e3f-1a2b3c4d5e6f\",\n      \"resume\": \"https://res.cloudinary.com/demo/raw/upload/v1/fieldops/applications/cv.pdf\",\n      \"resumePublicId\": \"fieldops/applications/cv\",\n      \"additionalFiles\": [\n        {\n          \"url\": \"https://res.cloudinary.com/demo/image/upload/v1/fieldops/applications/cert.jpg\",\n          \"publicId\": \"fieldops/applications/cert\"\n        }\n      ],\n      \"specialization\": \"HVAC\",\n      \"experience\": 8,\n      \"hourlyRate\": \"1200.00\",\n      \"bio\": \"Certified HVAC technician with 8 years of experience.\",\n      \"status\": \"PENDING\",\n      \"rejectionReason\": null,\n      \"reviewedBy\": null,\n      \"reviewedAt\": null,\n      \"createdAt\": \"2026-01-01T00:00:00.000Z\",\n      \"updatedAt\": \"2026-01-01T00:00:00.000Z\",\n      \"user\": {\n        \"id\": \"9c1f0f1e-...\",\n        \"name\": \"John Doe\",\n        \"email\": \"john@example.com\",\n        \"phone\": \"+8801712345678\",\n        \"role\": \"CUSTOMER\"\n      }\n    }\n  ],\n  \"meta\": {\n    \"page\": 1,\n    \"limit\": 10,\n    \"total\": 1,\n    \"totalPages\": 1\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Application By ID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// ---- FieldOps shared assertions + variable capture ----",
+                  "function decodeJwt(token) {\n    try {\n        var part = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');\n        while (part.length % 4) { part += '='; }\n        return JSON.parse(decodeURIComponent(escape(atob(part))));\n    } catch (e) {\n        return null;\n    }\n}\n\nfunction captureToken(token, key) {\n  if (!token) return;\n  pm.collectionVariables.set(key, token);\n  const payload = decodeJwt(token);\n  if (!payload) return;\n  if (payload.userId) pm.collectionVariables.set('userId', payload.userId);\n  if (payload.role) pm.collectionVariables.set('userRole', payload.role);\n  if (payload.role === 'ADMIN') pm.collectionVariables.set('adminAccessToken', token);\n  if (payload.role === 'TECHNICIAN') pm.collectionVariables.set('technicianAccessToken', token);\n  if (payload.role === 'CUSTOMER') pm.collectionVariables.set('customerAccessToken', token);\n}",
+                  "",
+                  "const body = pm.response.json();",
+                  "",
+                  "pm.test(\"Response status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Envelope success is true\", function () {",
+                  "    pm.expect(body.success, \"success\").to.be.true;",
+                  "});",
+                  "",
+                  "if (body.data && body.data.id) pm.collectionVariables.set(\"applicationId\", body.data.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "inherit"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/technicians/applications/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "technicians",
+                "applications",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{applicationId}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Requires `ADMIN`. Full detail for a single application, including every uploaded document."
+          },
+          "response": []
+        },
+        {
+          "name": "Approve Application",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// ---- FieldOps shared assertions + variable capture ----",
+                  "function decodeJwt(token) {\n    try {\n        var part = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');\n        while (part.length % 4) { part += '='; }\n        return JSON.parse(decodeURIComponent(escape(atob(part))));\n    } catch (e) {\n        return null;\n    }\n}\n\nfunction captureToken(token, key) {\n  if (!token) return;\n  pm.collectionVariables.set(key, token);\n  const payload = decodeJwt(token);\n  if (!payload) return;\n  if (payload.userId) pm.collectionVariables.set('userId', payload.userId);\n  if (payload.role) pm.collectionVariables.set('userRole', payload.role);\n  if (payload.role === 'ADMIN') pm.collectionVariables.set('adminAccessToken', token);\n  if (payload.role === 'TECHNICIAN') pm.collectionVariables.set('technicianAccessToken', token);\n  if (payload.role === 'CUSTOMER') pm.collectionVariables.set('customerAccessToken', token);\n}",
+                  "",
+                  "const body = pm.response.json();",
+                  "",
+                  "pm.test(\"Response status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Envelope success is true\", function () {",
+                  "    pm.expect(body.success, \"success\").to.be.true;",
+                  "});",
+                  "",
+                  "const data = body.data || {};",
+                  "if (data.id) pm.collectionVariables.set(\"applicationId\", data.id);",
+                  "if (data.profile && data.profile.id) pm.collectionVariables.set(\"technicianId\", data.profile.id);",
+                  "// the applicant is now a TECHNICIAN — these tokens are theirs",
+                  "captureToken(data.accessToken, \"technicianAccessToken\");",
+                  "captureToken(data.accessToken, \"accessToken\");",
+                  "captureToken(data.refreshToken, \"refreshToken\");"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "auth": {
+              "type": "inherit"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"APPROVED\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/technicians/applications/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "technicians",
+                "applications",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{applicationId}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Requires `ADMIN`. Send `status: \"APPROVED\"` with no other fields.\n\nIn one transaction this flips the user to `TECHNICIAN`, creates their `TechnicianProfile` from the application data, and records the review. The response carries a **new** token pair for the applicant — save them, because the admin's own token now has a stale role claim for that user.\n\nOnly `PENDING` applications can be reviewed; a second attempt returns 409."
+          },
+          "response": [
+            {
+              "name": "Success",
+              "originalRequest": {},
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": true,\n  \"statusCode\": 200,\n  \"message\": \"Application approved. The applicant is now a technician.\",\n  \"data\": {\n    \"id\": \"7c3d9e11-5a2b-4f18-9c6d-2e1f0a9b8c7d\",\n    \"userId\": \"9c1f0f1e-0a1b-4c2d-8e3f-1a2b3c4d5e6f\",\n    \"specialization\": \"HVAC\",\n    \"experience\": 8,\n    \"hourlyRate\": \"1200.00\",\n    \"status\": \"APPROVED\",\n    \"rejectionReason\": null,\n    \"reviewedBy\": \"2b3c4d5e-6f70-4812-9a3b-4c5d6e7f8091\",\n    \"reviewedAt\": \"2026-01-02T00:00:00.000Z\",\n    \"profile\": {\n      \"id\": \"5e6f7a8b-9c0d-4213-a4b5-c6d7e8f9a0b1\",\n      \"userId\": \"9c1f0f1e-0a1b-4c2d-8e3f-1a2b3c4d5e6f\",\n      \"bio\": \"Certified HVAC technician with 8 years of experience.\",\n      \"experience\": 8,\n      \"specialization\": \"HVAC\",\n      \"hourlyRate\": \"1200.00\",\n      \"rating\": \"0\",\n      \"totalReviews\": 0,\n      \"isAvailable\": true\n    },\n    \"accessToken\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...\",\n    \"refreshToken\": \"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Reject Application",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// ---- FieldOps shared assertions + variable capture ----",
+                  "function decodeJwt(token) {\n    try {\n        var part = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');\n        while (part.length % 4) { part += '='; }\n        return JSON.parse(decodeURIComponent(escape(atob(part))));\n    } catch (e) {\n        return null;\n    }\n}\n\nfunction captureToken(token, key) {\n  if (!token) return;\n  pm.collectionVariables.set(key, token);\n  const payload = decodeJwt(token);\n  if (!payload) return;\n  if (payload.userId) pm.collectionVariables.set('userId', payload.userId);\n  if (payload.role) pm.collectionVariables.set('userRole', payload.role);\n  if (payload.role === 'ADMIN') pm.collectionVariables.set('adminAccessToken', token);\n  if (payload.role === 'TECHNICIAN') pm.collectionVariables.set('technicianAccessToken', token);\n  if (payload.role === 'CUSTOMER') pm.collectionVariables.set('customerAccessToken', token);\n}",
+                  "",
+                  "const body = pm.response.json();",
+                  "",
+                  "pm.test(\"Response status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Envelope success is true\", function () {",
+                  "    pm.expect(body.success, \"success\").to.be.true;",
+                  "});",
+                  "",
+                  "if (body.data && body.data.id) pm.collectionVariables.set(\"applicationId\", body.data.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "auth": {
+              "type": "inherit"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"REJECTED\",\n  \"rejectionReason\": \"Resume does not show relevant field experience. Please reapply with a current CV.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/technicians/applications/:id",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "technicians",
+                "applications",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "{{applicationId}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "description": "Requires `ADMIN`. Send `status: \"REJECTED\"` plus a `rejectionReason` of 5-500 characters — the reason is mandatory and is emailed to the applicant, as well as returned by Get My Application.\n\nThe applicant keeps their `CUSTOMER` role and existing account. No tokens are issued."
+          },
+          "response": [
+            {
+              "name": "Missing reason",
+              "originalRequest": {},
+              "status": "Conflict",
+              "code": 409,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"success\": false,\n  \"statusCode\": 400,\n  \"name\": \"Internal Server Error\",\n  \"message\": \"A rejection reason is required when rejecting an application\"\n}"
+            }
+          ]
         }
       ]
     },
@@ -1310,7 +1839,7 @@
     },
     {
       "name": "Technicians",
-      "description": "Technician profiles under `/api/v1/technicians`. Browsing is public; anything that touches a profile requires the `TECHNICIAN` role.\n\nA technician profile only exists after the user calls Create Technician Profile — until then the profile-scoped routes return \"Technician profile not found\".",
+      "description": "Technician profiles under `/api/v1/technicians`. Browsing is public; anything that touches a profile requires the `TECHNICIAN` role.\n\nTechnicians are not self-registered — the only way in is the apply-then-approve flow in the Technician Application folder. Approval sets the role and creates the profile together, so a profile existing always implies an approved technician.",
       "item": [
         {
           "name": "Get All Technicians",
@@ -1538,7 +2067,7 @@
                 "profile"
               ]
             },
-            "description": "Requires `TECHNICIAN`. multipart/form-data for the optional `profileImage`, which is also written back to the user avatar.\n\nValidation: `experience` integer 0-50, `specialization` 2-100 chars, `hourlyRate` > 0, `bio` optional 10-500 chars. One profile per user — a second call returns 409 \"Technician profile already exists\".\n\nCaptures `{{technicianId}}`."
+            "description": "Requires `TECHNICIAN`. multipart/form-data for the optional `profileImage`, which is also written back to the user avatar.\n\nValidation: `experience` integer 0-50, `specialization` 2-100 chars, `hourlyRate` > 0, `bio` optional 10-500 chars. One profile per user — a second call returns 409.\n\n**Normally you do not need this.** Approving an application already creates the profile in the same transaction. This endpoint exists for the seeded technician and any admin-provisioned account that has the role without a profile.\n\nCaptures `{{technicianId}}`."
           },
           "response": []
         },

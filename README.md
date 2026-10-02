@@ -10,6 +10,8 @@ Express 5 + TypeScript, Prisma 7 on PostgreSQL, Redis for OTP codes, Cloudinary 
 
 **Roles.** Three: `CUSTOMER`, `TECHNICIAN`, `ADMIN`. The guard on each route decides what is public, what needs a technician, and what only an admin can do. Browsing services, technicians, and free slots is open; anything that writes to a profile is role-locked.
 
+**Becoming a technician.** Technicians cannot self-register. A customer submits an application with a resume and waits — there is no OTP step. An admin approves or rejects from the queue, and the applicant is notified by email either way. Approval promotes the user to `TECHNICIAN` and creates their profile in a single transaction, so a profile never exists without an approved role behind it — and it returns a fresh token pair, because changing the role invalidates the applicant's current token. A rejected applicant keeps their customer account and is told why.
+
 **Booking flow.** A technician publishes availability slots. A customer browses them, picks a slot, and creates a booking — this freezes the slot in the same transaction. The technician accepts or rejects, then works the job through `IN_PROGRESS` to `COMPLETED`. Transitions are enforced server-side, and the terminal states are final. Accepting a booking makes it payable; the customer completes payment through a Stripe Checkout session, and Stripe's webhook flips the payment to `PAID`. Once a completed booking is paid, the customer can review it, which recalculates the technician's aggregate rating.
 
 **Images.** Service and technician images upload to Cloudinary via multipart form-data. Replacing an image deletes the old asset.

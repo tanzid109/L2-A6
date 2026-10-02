@@ -6,6 +6,85 @@ import { sendResponse } from "../../utils/sendResponse";
 import { TechnicianService } from "./technician.service";
 import httpStatus from "http-status";
 
+
+const applyAsTechnician = catchAsync(async (req: Request, res: Response) => {
+	const files = req.files as
+		| { [fieldname: string]: Express.Multer.File[] }
+		| undefined;
+
+	const resume = files?.["resume"] ? files["resume"][0] : undefined;
+	const additionalFiles = files?.["additionalFiles"] || [];
+
+	const result = await TechnicianService.applyAsTechnician(
+		req.user!.userId,
+		req.body,
+		resume,
+		additionalFiles,
+	);
+
+	sendResponse(res, {
+		statusCode: httpStatus.OK,
+		success: true,
+		message:
+			"Application submitted successfully. You will be notified by email once it is reviewed.",
+		data: result,
+	});
+});
+
+const getMyApplication = catchAsync(async (req: Request, res: Response) => {
+	const result = await TechnicianService.getMyApplication(req.user!.userId);
+
+	sendResponse(res, {
+		statusCode: httpStatus.OK,
+		success: true,
+		message: "Application retrieved successfully",
+		data: result,
+	});
+});
+
+const getApplications = catchAsync(async (req: Request, res: Response) => {
+	const result = await TechnicianService.getApplications(req.query as any);
+
+	sendResponse(res, {
+		statusCode: httpStatus.OK,
+		success: true,
+		message: "Applications retrieved successfully",
+		data: result.data,
+		meta: result.meta,
+	});
+});
+
+const getApplicationById = catchAsync(async (req: Request, res: Response) => {
+	const result = await TechnicianService.getApplicationById(
+		req.params.id as string,
+	);
+
+	sendResponse(res, {
+		statusCode: httpStatus.OK,
+		success: true,
+		message: "Application retrieved successfully",
+		data: result,
+	});
+});
+
+const reviewApplication = catchAsync(async (req: Request, res: Response) => {
+	const result = await TechnicianService.reviewApplication(
+		req.params.id as string,
+		req.body,
+		req.user!,
+	);
+
+	sendResponse(res, {
+		statusCode: httpStatus.OK,
+		success: true,
+		message:
+			result.profile != null
+				? "Application approved. The applicant is now a technician."
+				: "Application rejected.",
+		data: result,
+	});
+});
+
 const createTechnicianProfile = catchAsync(
 	async (req: Request, res: Response) => {
 		const result = await TechnicianService.createTechnicianProfile(
@@ -91,6 +170,11 @@ const toggleAvailability = catchAsync(async (req: Request, res: Response) => {
 });
 
 export const TechnicianController = {
+	applyAsTechnician,
+	getMyApplication,
+	getApplications,
+	getApplicationById,
+	reviewApplication,
 	createTechnicianProfile,
 	getMyTechnicianProfile,
 	updateMyTechnicianProfile,

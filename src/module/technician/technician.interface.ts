@@ -19,3 +19,22 @@ export interface ITechnicianQuery {
  minRate?: number | undefined;
  maxRate?: number | undefined;
 }
+
+export interface IApplyAsTechnicianPayload {
+  specialization: string;
+  experience: number;
+  hourlyRate: number;
+  bio?: string | undefined;
+}
+
+export interface IReviewApplicationPayload {
+  status: "APPROVED" | "REJECTED";
+  rejectionReason?: string | undefined;
+}
+
+export interface ITechnicianApplicationQuery {
+  page: number;
+  limit: number;
+  status?: "PENDING" | "APPROVED" | "REJECTED" | undefined;
+  search?: string | undefined;
+}

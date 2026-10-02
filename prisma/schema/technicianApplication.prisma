@@ -1,0 +1,23 @@
+model TechnicianApplication {
+  id              String                      @id @default(uuid())
+  userId          String                      @unique
+  user            User                        @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  resume          String
+  resumePublicId  String
+  additionalFiles Json?
+  specialization  String
+  experience      Int
+  hourlyRate      Decimal                     @db.Decimal(10, 2)
+  bio             String?
+  status          TechnicianApplicationStatus @default(PENDING)
+  rejectionReason String?
+  reviewedBy      String?
+  reviewedAt      DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([createdAt])
+  @@map("technician_applications")
+}

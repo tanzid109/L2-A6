@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Application Approved</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 20px;
+    }
+
+    .wrapper {
+      width: 100%;
+      max-width: 520px;
+    }
+
+    .container {
+      background: #1e293b;
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 25px 50px rgba(0, 0, 0, 0.4);
+    }
+
+    .header {
+      background: linear-gradient(135deg, #10b981, #059669);
+      padding: 40px 32px;
+      text-align: center;
+    }
+
+    .logo {
+      font-size: 28px;
+      font-weight: 800;
+      color: #fff;
+      letter-spacing: -0.5px;
+    }
+
+    .logo span {
+      color: #a7f3d0;
+      font-weight: 400;
+    }
+
+    .header-icon {
+      width: 64px;
+      height: 64px;
+      background: rgba(255, 255, 255, 0.15);
+      border-radius: 16px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 16px;
+      font-size: 32px;
+    }
+
+    .body {
+      padding: 36px 32px;
+    }
+
+    .greeting {
+      font-size: 22px;
+      font-weight: 700;
+      color: #f8fafc;
+      margin-bottom: 12px;
+    }
+
+    .message {
+      font-size: 15px;
+      line-height: 1.7;
+      color: #94a3b8;
+      margin-bottom: 24px;
+    }
+
+    .detail-wrap {
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 24px;
+    }
+
+    .detail-label {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: #64748b;
+      margin-bottom: 6px;
+    }
+
+    .detail-value {
+      font-size: 16px;
+      font-weight: 700;
+      color: #6ee7b7;
+    }
+
+    .note {
+      font-size: 13px;
+      color: #64748b;
+      line-height: 1.6;
+    }
+
+    .divider {
+      height: 1px;
+      background: #334155;
+      margin: 0 32px;
+    }
+
+    .footer {
+      padding: 24px 32px;
+      text-align: center;
+      font-size: 12px;
+      color: #475569;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="wrapper">
+    <div class="container">
+      <div class="header">
+        <div class="header-icon">&#10003;</div>
+        <div class="logo">Field<span>Ops</span></div>
+      </div>
+      <div class="body">
+        <div class="greeting">Application approved</div>
+        <p class="message">
+          Good news, <%= name %>. Your technician application has been reviewed and
+          approved. You can now take bookings as a FieldOps technician.
+        </p>
+        <div class="detail-wrap">
+          <div class="detail-label">Specialization</div>
+          <div class="detail-value">
+            <%= specialization %>
+          </div>
+        </div>
+        <p class="note">
+          Your account has been switched to a technician role and your profile is live.
+          Sign in again to pick up your new access token, then add availability slots so
+          customers can book you.
+        </p>
+      </div>
+      <div class="divider"></div>
+      <div class="footer">
+        &copy; 2026 FieldOps. All rights reserved.
+      </div>
+    </div>
+  </div>
+</body>
+
+</html>
