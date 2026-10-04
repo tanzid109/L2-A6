@@ -13,6 +13,7 @@ import { PaymentRoutes } from './module/payment/payment.route'
 import { PaymentController } from './module/payment/payment.controller'
 import { ReviewRoutes } from './module/review/review.route'
 import { AnalyticsRoutes } from './module/analytics/analytics.route'
+import path from 'path'
 
 
 const app: Application = express()
@@ -50,13 +51,10 @@ app.use("/api/v1/payments", PaymentRoutes)
 app.use("/api/v1/reviews", ReviewRoutes)
 app.use("/api/v1/analytics", AnalyticsRoutes)
 
-// Basic route
-app.get('/', async (req: Request, res: Response) => {
-    res.status(httpStatus.OK).json({
-        success: true,
-        message: 'Welcome to FieldOps System Backend',
-    })
-})
+
+app.get("/", async (req: Request, res: Response) => {
+  res.sendFile(path.join(process.cwd(), "index.html"));
+});
 
 app.use(globalErrorHandler)
 app.use(notFound)
