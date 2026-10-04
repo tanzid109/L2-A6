@@ -22,7 +22,7 @@ app.use(
     origin: [
       "http://localhost:5000",
       "http://localhost:3000",
-      "https://fieldpro-backend-iota.vercel.app",
+      "https://fieldops-rose.vercel.app",
     ],
     credentials: true,
   }),
