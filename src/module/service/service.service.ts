@@ -1,4 +1,5 @@
 import { Prisma } from "../../../generated/prisma/client";
+import { Role } from "../../../generated/prisma/enums";
 import { prisma } from "../../lib/prisma";
 import { cloudinary } from "../../lib/cloudinary";
 import { AppError } from "../../utils/AppError";
@@ -29,7 +30,26 @@ const deleteImage = async (publicId: string): Promise<void> => {
   await cloudinary.uploader.destroy(publicId);
 };
 
+const ensureServiceOwnership = (
+  service: { createdById: string | null },
+  userId: string,
+  role: Role,
+  action: "update" | "delete",
+) => {
+  if (role === Role.ADMIN) {
+    return;
+  }
+
+  if (service.createdById !== userId) {
+    throw new AppError(
+      httpStatus.FORBIDDEN,
+      `You can only ${action} the services you created`,
+    );
+  }
+};
+
 const createService = async (
+  userId: string,
   payload: ICreateServicePayload,
   file?: Express.Multer.File,
 ) => {
@@ -62,6 +82,7 @@ const createService = async (
       duration: payload.duration,
       imageUrl,
       imagePublicId,
+      createdById: userId,
     },
   });
 
@@ -144,6 +165,8 @@ const getServiceById = async (id: string) => {
 };
 
 const updateService = async (
+  userId: string,
+  role: Role,
   id: string,
   payload: IUpdateServicePayload,
   file?: Express.Multer.File,
@@ -157,6 +180,8 @@ const updateService = async (
   if (!existingService) {
     throw new AppError(httpStatus.NOT_FOUND, "Service not found");
   }
+
+  ensureServiceOwnership(existingService, userId, role, "update");
 
   if (payload.slug) {
     const slugExists = await prisma.service.findFirst({
@@ -231,7 +256,7 @@ const updateService = async (
   return service;
 };
 
-const deleteService = async (id: string) => {
+const deleteService = async (userId: string, role: Role, id: string) => {
   const service = await prisma.service.findUnique({
     where: {
       id,
@@ -241,6 +266,8 @@ const deleteService = async (id: string) => {
   if (!service) {
     throw new AppError(httpStatus.NOT_FOUND, "Service not found");
   }
+
+  ensureServiceOwnership(service, userId, role, "delete");
 
   if (service.imagePublicId) {
     await deleteImage(service.imagePublicId);

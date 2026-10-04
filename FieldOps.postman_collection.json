@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "fieldops-api-collection",
     "name": "FieldOps System Backend",
-    "description": "API collection for the FieldOps backend — Express 5 + Prisma 7 + PostgreSQL, with Redis-backed OTP auth, Cloudinary uploads and Stripe payments.\n\n**Getting started**\n1. Set `baseUrl` (default `http://localhost:5000`, matching `PORT` in `.env`).\n2. Run the collection-level pre-request script once — it generates `{{futureDate}}`, `{{futureDateIso}}` and `{{stripeSignature}}` for you.\n3. Hit Login. The test scripts decode the JWT and fill in `{{accessToken}}` plus the role-scoped `{{adminAccessToken}}` / `{{technicianAccessToken}}` / `{{customerAccessToken}}`, so switch roles by logging in as that role.\n4. IDs are chained automatically: Get All Services sets `{{serviceId}}`, Get All Technicians sets `{{technicianId}}`, Create Availability sets `{{availabilityId}}`, Create Booking sets `{{bookingId}}`, and so on. The booking, payment and review flows each need their matching role token.\n5. Technicians cannot self-register. Run the Technician Application folder: Apply As Technician, then review from Get Applications and Approve or Reject. The decision is emailed to the applicant, and the approval response includes a token pair for the new technician.\n\n**Conventions**\n- Every response uses the envelope `{ success, statusCode, message, data, meta? }`; paginated endpoints add `meta: { page, limit, total, totalPages }`.\n- `Content-Type: application/json` on JSON bodies. Endpoints with file uploads use multipart/form-data, so they deliberately carry no `Content-Type` header — Postman sets the boundary itself.\n- Query filters that look boolean (`isActive`, `isBooked`, `isAvailable`) are validated as the **strings** `\"true\"` / `\"false\"`, while `isActive` in an Update Service body is a real boolean.\n\n**Known behaviour**\n`globalErrorHandler` computes a `statusCode` but always responds with HTTP 500, so auth failures, role violations, Zod validation failures and `AppError`s such as 404 / 409 all arrive as 500 with the real reason in `message` (in `NODE_ENV=development`). The one exception is unmatched routes, which return a genuine 404. Assertions here check for success rather than specific error codes.",
+    "description": "API collection for the FieldOps backend — Express 5 + Prisma 7 + PostgreSQL, with Redis-backed OTP auth, Cloudinary uploads and Stripe payments.\n\n**Getting started**\n1. Set `baseUrl` (default `http://localhost:5000`, matching `PORT` in `.env`).\n2. Run the collection-level pre-request script once — it generates `{{futureDate}}`, `{{futureDateIso}}` and `{{stripeSignature}}` for you.\n3. Hit Login. The test scripts decode the JWT and fill in `{{accessToken}}` plus the role-scoped `{{adminAccessToken}}` / `{{technicianAccessToken}}` / `{{customerAccessToken}}`, so switch roles by logging in as that role.\n4. IDs are chained automatically: Get All Services sets `{{serviceId}}`, Get All Technicians sets `{{technicianId}}`, Create Availability sets `{{availabilityId}}`, Create Booking sets `{{bookingId}}`, and so on. The booking, payment and review flows each need their matching role token.\n5. Technicians cannot self-register. Run the Technician Application folder: Apply As Technician, then review from Get Applications and Approve or Reject. The decision is emailed to the applicant, and the approval response includes a token pair for the new technician.\n\n**Who can call what**\nEvery request is tagged with the role it requires. The tag is read from the `auth(Role.X)` middleware in the route file, not hand-written, so it always matches the server.\n\n- No tag — **public**. Auth is set to *noauth*, so nothing is sent.\n- `[CUSTOMER]` — books services, pays, reviews, updates own profile, applies to be a technician. Sends `{{customerAccessToken}}`.\n- `[TECHNICIAN]` — manages availability, updates own profile, works assigned bookings, technician analytics. Sends `{{technicianAccessToken}}`.\n- `[ADMIN]` — creates and edits services, reviews technician applications, admin analytics. Sends `{{adminAccessToken}}`.\n\nBecause each role has its own variable, you can hold three sessions at once — log in as an admin, a technician and a customer and every request already picks the right one. Role violations come back as an error (see Known behaviour).\n\n**Conventions**\n- Every response uses the envelope `{ success, statusCode, message, data, meta? }`; paginated endpoints add `meta: { page, limit, total, totalPages }`.\n- `Content-Type: application/json` on JSON bodies. Endpoints with file uploads use multipart/form-data, so they deliberately carry no `Content-Type` header — Postman sets the boundary itself.\n- Query filters that look boolean (`isActive`, `isBooked`, `isAvailable`) are validated as the **strings** `\"true\"` / `\"false\"`, while `isActive` in an Update Service body is a real boolean.\n\n**Known behaviour**\n`globalErrorHandler` computes a `statusCode` but always responds with HTTP 500, so auth failures, role violations, Zod validation failures and `AppError`s such as 404 / 409 all arrive as 500 with the real reason in `message` (in `NODE_ENV=development`). The one exception is unmatched routes, which return a genuine 404. Assertions here check for success rather than specific error codes.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -211,7 +211,7 @@
                 "/"
               ]
             },
-            "description": "Basic route registered in `src/app.ts`. Confirms the server is up and reachable."
+            "description": "**Access: public** — no token required. Registered directly in `src/app.ts` rather than in a module router, so it carries no role tag. Confirms the server is up and reachable."
           },
           "response": [
             {
@@ -269,7 +269,7 @@
                 "does-not-exist"
               ]
             },
-            "description": "Any unmatched path falls through to `notFound` middleware and returns 404. Useful for checking that a route you expect really does not exist.\n\nNote: unlike other failures, the 404 handler responds with the real HTTP 404 status."
+            "description": "**Access: public** — no token required, and no such route exists by design.\n\nAny unmatched path falls through to `notFound` middleware and returns 404. Useful for checking that a route you expect really does not exist.\n\nNote: unlike other failures, the 404 handler responds with the real HTTP 404 status."
           },
           "response": [
             {
@@ -355,7 +355,7 @@
                 "register"
               ]
             },
-            "description": "Creates a pending registration and emails a 6-digit OTP. Password rules: min 8 chars, at least one uppercase, one lowercase, one number and one special character. `phone` is optional.\n\nRe-running with the same email fails until the account exists — use a fresh email or reset with Forgot Password."
+            "description": "**Access: public** — no token required.\n\nCreates a pending registration and emails a 6-digit OTP. Password rules: min 8 chars, at least one uppercase, one lowercase, one number and one special character. `phone` is optional.\n\nRe-running with the same email fails until the account exists — use a fresh email or reset with Forgot Password."
           },
           "response": []
         },
@@ -420,7 +420,7 @@
                 "verify-email"
               ]
             },
-            "description": "Verifies the emailed OTP, creates the user, sends the welcome email and returns the user plus both tokens. Captures `accessToken`, `refreshToken`, `userId` and the role-scoped tokens."
+            "description": "**Access: public** — no token required.\n\nVerifies the emailed OTP, creates the user, sends the welcome email and returns the user plus both tokens. Captures `accessToken`, `refreshToken`, `userId` and the role-scoped tokens."
           },
           "response": []
         },
@@ -485,7 +485,7 @@
                 "login"
               ]
             },
-            "description": "Credential login. Same password rules as registration are enforced on the payload.\n\nServer seeds an ADMIN, a TECHNICIAN and a CUSTOMER on boot — their emails and passwords come from `ADMIN_EMAIL` / `TECHNICIAN_EMAIL` / `CUSTOMER_EMAIL` in `.env`. Log in as each role when you need to hit role-guarded endpoints."
+            "description": "**Access: public** — no token required.\n\nCredential login. Same password rules as registration are enforced on the payload.\n\nServer seeds an ADMIN, a TECHNICIAN and a CUSTOMER on boot — their emails and passwords come from `ADMIN_EMAIL` / `TECHNICIAN_EMAIL` / `CUSTOMER_EMAIL` in `.env`. Log in as each role when you need to hit role-guarded endpoints."
           },
           "response": []
         },
@@ -550,7 +550,7 @@
                 "google-login"
               ]
             },
-            "description": "Exchanges a Google ID token for API tokens, creating the user on first sign-in. `idToken` must be issued for the `GOOGLE_CLIENT_ID` in `.env`, and the token must carry both `email` and `name` claims.\n\nNo Zod validation on this route — an unverifiable token throws \"Invalid Or Expired Google Id Token\"."
+            "description": "**Access: public** — no token required.\n\nExchanges a Google ID token for API tokens, creating the user on first sign-in. `idToken` must be issued for the `GOOGLE_CLIENT_ID` in `.env`, and the token must carry both `email` and `name` claims.\n\nNo Zod validation on this route — an unverifiable token throws \"Invalid Or Expired Google Id Token\"."
           },
           "response": []
         },
@@ -615,7 +615,7 @@
                 "refresh-token"
               ]
             },
-            "description": "Rotates the pair: returns a fresh access token and refresh token. The refresh token is read from the `refreshToken` cookie if present, otherwise from the body — this request sends it in the body.\n\nThe user must still exist and be `ACTIVE`.\n\nNote: the server does not currently set cookies itself, so the body field is what actually gets used here."
+            "description": "**Access: public** — no token required.\n\nRotates the pair: returns a fresh access token and refresh token. The refresh token is read from the `refreshToken` cookie if present, otherwise from the body — this request sends it in the body.\n\nThe user must still exist and be `ACTIVE`.\n\nNote: the server does not currently set cookies itself, so the body field is what actually gets used here."
           },
           "response": []
         },
@@ -679,7 +679,7 @@
                 "forgot-password"
               ]
             },
-            "description": "Emails a password-reset OTP (5 minute TTL in Redis). Only available for `CREDENTIAL` accounts — Google-only accounts get \"User has account with google\". Banned users are rejected."
+            "description": "**Access: public** — no token required.\n\nEmails a password-reset OTP (5 minute TTL in Redis). Only available for `CREDENTIAL` accounts — Google-only accounts get \"User has account with google\". Banned users are rejected."
           },
           "response": []
         },
@@ -743,7 +743,7 @@
                 "reset-password"
               ]
             },
-            "description": "Consumes the OTP from Forgot Password and sets the new password (hashed with bcrypt). `newPassword` follows the same complexity rules as registration.\n\nUpdate `{{password}}` after this so later Login requests keep working."
+            "description": "**Access: public** — no token required.\n\nConsumes the OTP from Forgot Password and sets the new password (hashed with bcrypt). `newPassword` follows the same complexity rules as registration.\n\nUpdate `{{password}}` after this so later Login requests keep working."
           },
           "response": []
         },
@@ -785,7 +785,7 @@
               }
             ],
             "auth": {
-              "type": "inherit"
+              "type": "noauth"
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/auth/logout",
@@ -799,12 +799,12 @@
                 "logout"
               ]
             },
-            "description": "Clears the `accessToken` and `refreshToken` cookies. No auth required and nothing is invalidated server-side — the JWTs remain valid until they expire, so treat this as clearing client state rather than revocation."
+            "description": "**Access: public** — no token required.\n\nClears the `accessToken` and `refreshToken` cookies. No auth required and nothing is invalidated server-side — the JWTs remain valid until they expire, so treat this as clearing client state rather than revocation."
           },
           "response": []
         },
         {
-          "name": "Get Me",
+          "name": "[CUSTOMER] Get Me",
           "event": [
             {
               "listen": "test",
@@ -834,7 +834,14 @@
             "method": "GET",
             "header": [],
             "auth": {
-              "type": "inherit"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerAccessToken}}",
+                  "type": "string"
+                }
+              ]
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/auth/me",
@@ -848,7 +855,7 @@
                 "me"
               ]
             },
-            "description": "Requires `CUSTOMER`, `TECHNICIAN` or `ADMIN` — any authenticated caller. `password` is omitted. Captures `userId` from the response.\n\nThe auth middleware matches the JWT against the database on `id` + `email` + `name` + `role`, so changing your name or email invalidates tokens issued before the change."
+            "description": "**Access: CUSTOMER only** — requires a token whose `role` claim is CUSTOMER. Uses `{{customerAccessToken}}`.\n\nRequires `CUSTOMER`, `TECHNICIAN` or `ADMIN` — any authenticated caller. `password` is omitted. Captures `userId` from the response.\n\nThe auth middleware matches the JWT against the database on `id` + `email` + `name` + `role`, so changing your name or email invalidates tokens issued before the change."
           },
           "response": [
             {
@@ -869,7 +876,7 @@
           ]
         },
         {
-          "name": "Update Profile",
+          "name": "[CUSTOMER] Update Profile",
           "event": [
             {
               "listen": "test",
@@ -898,7 +905,14 @@
             "method": "PATCH",
             "header": [],
             "auth": {
-              "type": "inherit"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerAccessToken}}",
+                  "type": "string"
+                }
+              ]
             },
             "body": {
               "mode": "formdata",
@@ -935,7 +949,7 @@
                 "profile"
               ]
             },
-            "description": "Requires `CUSTOMER`, `TECHNICIAN` or `ADMIN`.\n\nmultipart/form-data. `name` (2-100 chars) and `phone` (6-20 chars) are optional; `avatar` is an optional image uploaded to Cloudinary. Uploading a new avatar deletes the previous Cloudinary asset.\n\nChanging `name` invalidates your current access token because the middleware matches the JWT name against the stored user."
+            "description": "**Access: CUSTOMER only** — requires a token whose `role` claim is CUSTOMER. Uses `{{customerAccessToken}}`.\n\nRequires `CUSTOMER`, `TECHNICIAN` or `ADMIN`.\n\nmultipart/form-data. `name` (2-100 chars) and `phone` (6-20 chars) are optional; `avatar` is an optional image uploaded to Cloudinary. Uploading a new avatar deletes the previous Cloudinary asset.\n\nChanging `name` invalidates your current access token because the middleware matches the JWT name against the stored user."
           },
           "response": []
         }
@@ -946,7 +960,7 @@
       "description": "Apply-then-approve flow for becoming a technician.\n\n**How it fits together:** a registered `CUSTOMER` submits an application with a resume, and it is stored as `PENDING`. No OTP step — the applicant just waits. An `ADMIN` reviews the queue and approves or rejects, and the applicant is notified by email either way.\n\nApproval promotes the user to `TECHNICIAN` **and** creates their `TechnicianProfile` in one transaction, then returns a fresh token pair. That last part matters: the auth middleware matches the JWT against the database on `id` + `email` + `name` + `role`, so changing the role invalidates the token you approved with. Use the tokens from the approval response.\n\nA rejected applicant stays a `CUSTOMER`, keeps working normally, and can read the reason via Get My Application.",
       "item": [
         {
-          "name": "Apply As Technician",
+          "name": "[CUSTOMER] Apply As Technician",
           "event": [
             {
               "listen": "test",
@@ -975,7 +989,14 @@
             "method": "POST",
             "header": [],
             "auth": {
-              "type": "inherit"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerAccessToken}}",
+                  "type": "string"
+                }
+              ]
             },
             "body": {
               "mode": "formdata",
@@ -1030,7 +1051,7 @@
                 "application"
               ]
             },
-            "description": "Requires `CUSTOMER`. multipart/form-data.\n\nRequires an account with a verified email (run Verify Email in the Auth folder first) and no existing profile or application. `resume` is a required file; `additionalFiles` takes up to 10 more.\n\nValidation: `specialization` 2-100 chars, `experience` integer 0-50, `hourlyRate` > 0, `bio` optional 10-500 chars. Returns the stored application with status `PENDING`. No email is sent yet — the applicant hears back only when an admin decides.\n\nCaptures `{{applicationId}}`, which the admin review step needs."
+            "description": "**Access: CUSTOMER only** — requires a token whose `role` claim is CUSTOMER. Uses `{{customerAccessToken}}`.\n\nRequires `CUSTOMER`. multipart/form-data.\n\nRequires an account with a verified email (run Verify Email in the Auth folder first) and no existing profile or application. `resume` is a required file; `additionalFiles` takes up to 10 more.\n\nValidation: `specialization` 2-100 chars, `experience` integer 0-50, `hourlyRate` > 0, `bio` optional 10-500 chars. Returns the stored application with status `PENDING`. No email is sent yet — the applicant hears back only when an admin decides.\n\nCaptures `{{applicationId}}`, which the admin review step needs."
           },
           "response": [
             {
@@ -1066,13 +1087,20 @@
           ]
         },
         {
-          "name": "Get My Application",
+          "name": "[CUSTOMER] Get My Application",
           "event": [],
           "request": {
             "method": "GET",
             "header": [],
             "auth": {
-              "type": "inherit"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerAccessToken}}",
+                  "type": "string"
+                }
+              ]
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/technicians/application/me",
@@ -1087,12 +1115,12 @@
                 "me"
               ]
             },
-            "description": "Requires `CUSTOMER`. Returns the caller's own application with its status, rejection reason if any, and review timestamp — so the frontend can show \"under review\" or surface the reason it was turned down.\n\nOne application per account. A rejected applicant is told to wait for a future reapply allowance rather than resubmitting immediately."
+            "description": "**Access: CUSTOMER only** — requires a token whose `role` claim is CUSTOMER. Uses `{{customerAccessToken}}`.\n\nRequires `CUSTOMER`. Returns the caller's own application with its status, rejection reason if any, and review timestamp — so the frontend can show \"under review\" or surface the reason it was turned down.\n\nOne application per account. A rejected applicant is told to wait for a future reapply allowance rather than resubmitting immediately."
           },
           "response": []
         },
         {
-          "name": "Get Applications",
+          "name": "[ADMIN] Get Applications",
           "event": [
             {
               "listen": "test",
@@ -1122,7 +1150,14 @@
             "method": "GET",
             "header": [],
             "auth": {
-              "type": "inherit"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminAccessToken}}",
+                  "type": "string"
+                }
+              ]
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/technicians/applications?status=PENDING&search=&page=1&limit=10",
@@ -1162,7 +1197,7 @@
                 }
               ]
             },
-            "description": "Requires `ADMIN`. The review queue, newest first, with the applicant's user record. Filter to `PENDING` for the default inbox.\n\nCaptures the first application id into `{{applicationId}}`."
+            "description": "**Access: ADMIN only** — requires a token whose `role` claim is ADMIN. Uses `{{adminAccessToken}}`.\n\nRequires `ADMIN`. The review queue, newest first, with the applicant's user record. Filter to `PENDING` for the default inbox.\n\nCaptures the first application id into `{{applicationId}}`."
           },
           "response": [
             {
@@ -1183,7 +1218,7 @@
           ]
         },
         {
-          "name": "Get Application By ID",
+          "name": "[ADMIN] Get Application By ID",
           "event": [
             {
               "listen": "test",
@@ -1212,7 +1247,14 @@
             "method": "GET",
             "header": [],
             "auth": {
-              "type": "inherit"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminAccessToken}}",
+                  "type": "string"
+                }
+              ]
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/technicians/applications/:id",
@@ -1234,12 +1276,12 @@
                 }
               ]
             },
-            "description": "Requires `ADMIN`. Full detail for a single application, including every uploaded document."
+            "description": "**Access: ADMIN only** — requires a token whose `role` claim is ADMIN. Uses `{{adminAccessToken}}`.\n\nRequires `ADMIN`. Full detail for a single application, including every uploaded document."
           },
           "response": []
         },
         {
-          "name": "Approve Application",
+          "name": "[ADMIN] Approve Application",
           "event": [
             {
               "listen": "test",
@@ -1274,7 +1316,14 @@
             "method": "PATCH",
             "header": [],
             "auth": {
-              "type": "inherit"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminAccessToken}}",
+                  "type": "string"
+                }
+              ]
             },
             "body": {
               "mode": "raw",
@@ -1305,7 +1354,7 @@
                 }
               ]
             },
-            "description": "Requires `ADMIN`. Send `status: \"APPROVED\"` with no other fields.\n\nIn one transaction this flips the user to `TECHNICIAN`, creates their `TechnicianProfile` from the application data, and records the review. The response carries a **new** token pair for the applicant — save them, because the admin's own token now has a stale role claim for that user.\n\nOnly `PENDING` applications can be reviewed; a second attempt returns 409."
+            "description": "**Access: ADMIN only** — requires a token whose `role` claim is ADMIN. Uses `{{adminAccessToken}}`.\n\nRequires `ADMIN`. Send `status: \"APPROVED\"` with no other fields.\n\nIn one transaction this flips the user to `TECHNICIAN`, creates their `TechnicianProfile` from the application data, and records the review. The response carries a **new** token pair for the applicant — save them, because the admin's own token now has a stale role claim for that user.\n\nOnly `PENDING` applications can be reviewed; a second attempt returns 409."
           },
           "response": [
             {
@@ -1326,7 +1375,7 @@
           ]
         },
         {
-          "name": "Reject Application",
+          "name": "[ADMIN] Reject Application",
           "event": [
             {
               "listen": "test",
@@ -1355,7 +1404,14 @@
             "method": "PATCH",
             "header": [],
             "auth": {
-              "type": "inherit"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminAccessToken}}",
+                  "type": "string"
+                }
+              ]
             },
             "body": {
               "mode": "raw",
@@ -1386,7 +1442,7 @@
                 }
               ]
             },
-            "description": "Requires `ADMIN`. Send `status: \"REJECTED\"` plus a `rejectionReason` of 5-500 characters — the reason is mandatory and is emailed to the applicant, as well as returned by Get My Application.\n\nThe applicant keeps their `CUSTOMER` role and existing account. No tokens are issued."
+            "description": "**Access: ADMIN only** — requires a token whose `role` claim is ADMIN. Uses `{{adminAccessToken}}`.\n\nRequires `ADMIN`. Send `status: \"REJECTED\"` plus a `rejectionReason` of 5-500 characters — the reason is mandatory and is emailed to the applicant, as well as returned by Get My Application.\n\nThe applicant keeps their `CUSTOMER` role and existing account. No tokens are issued."
           },
           "response": [
             {
@@ -1488,7 +1544,7 @@
                 }
               ]
             },
-            "description": "Public, paginated list. Query is validated with Zod: `page` and `limit` are coerced to numbers, and `limit` is capped at 100. Pagination metadata comes back under `meta`.\n\nCaptures the first result id into `{{serviceId}}` so the requests below have something to work with."
+            "description": "**Access: public** — no token required.\n\nPublic, paginated list. Query is validated with Zod: `page` and `limit` are coerced to numbers, and `limit` is capped at 100. Pagination metadata comes back under `meta`.\n\nCaptures the first result id into `{{serviceId}}` so the requests below have something to work with."
           },
           "response": [
             {
@@ -1559,12 +1615,12 @@
                 }
               ]
             },
-            "description": "Public lookup of a single service by id."
+            "description": "**Access: public** — no token required.\n\nPublic lookup of a single service by id."
           },
           "response": []
         },
         {
-          "name": "Create Service",
+          "name": "[ADMIN] Create Service",
           "event": [
             {
               "listen": "test",
@@ -1593,7 +1649,14 @@
             "method": "POST",
             "header": [],
             "auth": {
-              "type": "inherit"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminAccessToken}}",
+                  "type": "string"
+                }
+              ]
             },
             "body": {
               "mode": "formdata",
@@ -1653,7 +1716,7 @@
                 "services"
               ]
             },
-            "description": "Requires `ADMIN`. multipart/form-data because of the optional `image` upload.\n\nValidation: `title` 3-100 chars, `slug` lowercase-with-hyphens (`/^[a-z0-9]+(?:-[a-z0-9]+)*$/`), `description` min 10 chars, `category` min 2 chars, `price` > 0, `duration` positive integer. `slug` is unique — reusing one returns 409 \"A service with this slug already exists\".\n\nCaptures `{{serviceId}}`."
+            "description": "**Access: ADMIN only** — requires a token whose `role` claim is ADMIN. Uses `{{adminAccessToken}}`.\n\nRequires `ADMIN`. multipart/form-data because of the optional `image` upload.\n\nValidation: `title` 3-100 chars, `slug` lowercase-with-hyphens (`/^[a-z0-9]+(?:-[a-z0-9]+)*$/`), `description` min 10 chars, `category` min 2 chars, `price` > 0, `duration` positive integer. `slug` is unique — reusing one returns 409 \"A service with this slug already exists\".\n\nCaptures `{{serviceId}}`."
           },
           "response": [
             {
@@ -1674,7 +1737,7 @@
           ]
         },
         {
-          "name": "Update Service",
+          "name": "[ADMIN] Update Service",
           "event": [
             {
               "listen": "test",
@@ -1703,7 +1766,14 @@
             "method": "PATCH",
             "header": [],
             "auth": {
-              "type": "inherit"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminAccessToken}}",
+                  "type": "string"
+                }
+              ]
             },
             "body": {
               "mode": "formdata",
@@ -1777,12 +1847,12 @@
                 }
               ]
             },
-            "description": "Requires `ADMIN`. multipart/form-data. Every field is optional; `isActive` is a real JSON boolean here (unlike the query filters, which expect the strings \"true\"/\"false\"). Supplying a new `image` deletes the previous Cloudinary asset."
+            "description": "**Access: ADMIN only** — requires a token whose `role` claim is ADMIN. Uses `{{adminAccessToken}}`.\n\nRequires `ADMIN`. multipart/form-data. Every field is optional; `isActive` is a real JSON boolean here (unlike the query filters, which expect the strings \"true\"/\"false\"). Supplying a new `image` deletes the previous Cloudinary asset."
           },
           "response": []
         },
         {
-          "name": "Delete Service",
+          "name": "[ADMIN] Delete Service",
           "event": [
             {
               "listen": "test",
@@ -1810,7 +1880,14 @@
             "method": "DELETE",
             "header": [],
             "auth": {
-              "type": "inherit"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminAccessToken}}",
+                  "type": "string"
+                }
+              ]
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/services/:id",
@@ -1831,7 +1908,7 @@
                 }
               ]
             },
-            "description": "Requires `ADMIN`. Soft delete: sets `isActive = false` rather than removing the row, and deletes the Cloudinary image if one is attached. Existing bookings keep their reference to the service."
+            "description": "**Access: ADMIN only** — requires a token whose `role` claim is ADMIN. Uses `{{adminAccessToken}}`.\n\nRequires `ADMIN`. Soft delete: sets `isActive = false` rather than removing the row, and deletes the Cloudinary image if one is attached. Existing bookings keep their reference to the service."
           },
           "response": []
         }
@@ -1929,7 +2006,7 @@
                 }
               ]
             },
-            "description": "Public, paginated list of technician profiles with their user details, aggregate rating and availability flag.\n\nCaptures the first profile id into `{{technicianId}}` — note this is the `TechnicianProfile.id`, which is what bookings and availability routes expect, not the underlying user id."
+            "description": "**Access: public** — no token required.\n\nPublic, paginated list of technician profiles with their user details, aggregate rating and availability flag.\n\nCaptures the first profile id into `{{technicianId}}` — note this is the `TechnicianProfile.id`, which is what bookings and availability routes expect, not the underlying user id."
           },
           "response": []
         },
@@ -1984,12 +2061,12 @@
                 }
               ]
             },
-            "description": "Public profile lookup. Captures `{{technicianId}}` so this can be used to seed the variable before creating a booking."
+            "description": "**Access: public** — no token required.\n\nPublic profile lookup. Captures `{{technicianId}}` so this can be used to seed the variable before creating a booking."
           },
           "response": []
         },
         {
-          "name": "Create Technician Profile",
+          "name": "[TECHNICIAN] Create Technician Profile",
           "event": [
             {
               "listen": "test",
@@ -2018,7 +2095,14 @@
             "method": "POST",
             "header": [],
             "auth": {
-              "type": "inherit"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{technicianAccessToken}}",
+                  "type": "string"
+                }
+              ]
             },
             "body": {
               "mode": "formdata",
@@ -2067,12 +2151,12 @@
                 "profile"
               ]
             },
-            "description": "Requires `TECHNICIAN`. multipart/form-data for the optional `profileImage`, which is also written back to the user avatar.\n\nValidation: `experience` integer 0-50, `specialization` 2-100 chars, `hourlyRate` > 0, `bio` optional 10-500 chars. One profile per user — a second call returns 409.\n\n**Normally you do not need this.** Approving an application already creates the profile in the same transaction. This endpoint exists for the seeded technician and any admin-provisioned account that has the role without a profile.\n\nCaptures `{{technicianId}}`."
+            "description": "**Access: TECHNICIAN only** — requires a token whose `role` claim is TECHNICIAN. Uses `{{technicianAccessToken}}`.\n\nRequires `TECHNICIAN`. multipart/form-data for the optional `profileImage`, which is also written back to the user avatar.\n\nValidation: `experience` integer 0-50, `specialization` 2-100 chars, `hourlyRate` > 0, `bio` optional 10-500 chars. One profile per user — a second call returns 409.\n\n**Normally you do not need this.** Approving an application already creates the profile in the same transaction. This endpoint exists for the seeded technician and any admin-provisioned account that has the role without a profile.\n\nCaptures `{{technicianId}}`."
           },
           "response": []
         },
         {
-          "name": "Get My Technician Profile",
+          "name": "[TECHNICIAN] Get My Technician Profile",
           "event": [
             {
               "listen": "test",
@@ -2101,7 +2185,14 @@
             "method": "GET",
             "header": [],
             "auth": {
-              "type": "inherit"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{technicianAccessToken}}",
+                  "type": "string"
+                }
+              ]
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/technicians/profile/me",
@@ -2116,12 +2207,12 @@
                 "me"
               ]
             },
-            "description": "Requires `TECHNICIAN`. Returns the caller's own profile with the related user record."
+            "description": "**Access: TECHNICIAN only** — requires a token whose `role` claim is TECHNICIAN. Uses `{{technicianAccessToken}}`.\n\nRequires `TECHNICIAN`. Returns the caller's own profile with the related user record."
           },
           "response": []
         },
         {
-          "name": "Update My Technician Profile",
+          "name": "[TECHNICIAN] Update My Technician Profile",
           "event": [
             {
               "listen": "test",
@@ -2150,7 +2241,14 @@
             "method": "PATCH",
             "header": [],
             "auth": {
-              "type": "inherit"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{technicianAccessToken}}",
+                  "type": "string"
+                }
+              ]
             },
             "body": {
               "mode": "formdata",
@@ -2200,12 +2298,12 @@
                 "me"
               ]
             },
-            "description": "Requires `TECHNICIAN`. multipart/form-data. All fields optional — this is the partial form of the create schema, so `experience` and `hourlyRate` can be changed without resending everything. A new `profileImage` replaces the old Cloudinary asset."
+            "description": "**Access: TECHNICIAN only** — requires a token whose `role` claim is TECHNICIAN. Uses `{{technicianAccessToken}}`.\n\nRequires `TECHNICIAN`. multipart/form-data. All fields optional — this is the partial form of the create schema, so `experience` and `hourlyRate` can be changed without resending everything. A new `profileImage` replaces the old Cloudinary asset."
           },
           "response": []
         },
         {
-          "name": "Toggle Availability",
+          "name": "[TECHNICIAN] Toggle Availability",
           "event": [
             {
               "listen": "test",
@@ -2234,7 +2332,14 @@
             "method": "PATCH",
             "header": [],
             "auth": {
-              "type": "inherit"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{technicianAccessToken}}",
+                  "type": "string"
+                }
+              ]
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/technicians/availability/toggle",
@@ -2249,7 +2354,7 @@
                 "toggle"
               ]
             },
-            "description": "Requires `TECHNICIAN`. Flips the profile-level `isAvailable` flag that customers see when browsing. This is separate from individual availability slots under `/availability`."
+            "description": "**Access: TECHNICIAN only** — requires a token whose `role` claim is TECHNICIAN. Uses `{{technicianAccessToken}}`.\n\nRequires `TECHNICIAN`. Flips the profile-level `isAvailable` flag that customers see when browsing. This is separate from individual availability slots under `/availability`."
           },
           "response": []
         }
@@ -2260,7 +2365,7 @@
       "description": "Time slots under `/api/v1/availability`. Creating, editing and deleting requires `TECHNICIAN`; reading a technician's public slots is open.\n\nSlots cannot be in the past, must satisfy `startTime < endTime`, and cannot overlap another slot for the same technician on the same day. Booked slots are locked — updates and deletes are rejected until the booking is cancelled.",
       "item": [
         {
-          "name": "Create Availability",
+          "name": "[TECHNICIAN] Create Availability",
           "event": [
             {
               "listen": "test",
@@ -2289,7 +2394,14 @@
             "method": "POST",
             "header": [],
             "auth": {
-              "type": "inherit"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{technicianAccessToken}}",
+                  "type": "string"
+                }
+              ]
             },
             "body": {
               "mode": "raw",
@@ -2311,7 +2423,7 @@
                 "availability"
               ]
             },
-            "description": "Requires `TECHNICIAN`. `date` must be a full ISO datetime (Zod `datetime()`), not a bare date — `{{futureDateIso}}` is generated for you by the collection-level pre-request script. Times are `HH:MM` 24-hour strings.\n\nCaptures `{{availabilityId}}`, which Create Booking needs."
+            "description": "**Access: TECHNICIAN only** — requires a token whose `role` claim is TECHNICIAN. Uses `{{technicianAccessToken}}`.\n\nRequires `TECHNICIAN`. `date` must be a full ISO datetime (Zod `datetime()`), not a bare date — `{{futureDateIso}}` is generated for you by the collection-level pre-request script. Times are `HH:MM` 24-hour strings.\n\nCaptures `{{availabilityId}}`, which Create Booking needs."
           },
           "response": [
             {
@@ -2332,7 +2444,7 @@
           ]
         },
         {
-          "name": "Get My Availability",
+          "name": "[TECHNICIAN] Get My Availability",
           "event": [
             {
               "listen": "test",
@@ -2362,7 +2474,14 @@
             "method": "GET",
             "header": [],
             "auth": {
-              "type": "inherit"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{technicianAccessToken}}",
+                  "type": "string"
+                }
+              ]
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/availability/my?date={{futureDate}}&isBooked=false&page=1&limit=20",
@@ -2402,7 +2521,7 @@
                 }
               ]
             },
-            "description": "Requires `TECHNICIAN`. Paginated list of the caller's slots. Note the default page size here is 20, not 10.\n\nCaptures the first slot id into `{{availabilityId}}`."
+            "description": "**Access: TECHNICIAN only** — requires a token whose `role` claim is TECHNICIAN. Uses `{{technicianAccessToken}}`.\n\nRequires `TECHNICIAN`. Paginated list of the caller's slots. Note the default page size here is 20, not 10.\n\nCaptures the first slot id into `{{availabilityId}}`."
           },
           "response": []
         },
@@ -2485,12 +2604,12 @@
                 }
               ]
             },
-            "description": "Public list of a technician's slots, used by customers to pick a time. When `isBooked` is omitted the service defaults to free slots only.\n\nCaptures the first slot id into `{{availabilityId}}`."
+            "description": "**Access: public** — no token required.\n\nPublic list of a technician's slots, used by customers to pick a time. When `isBooked` is omitted the service defaults to free slots only.\n\nCaptures the first slot id into `{{availabilityId}}`."
           },
           "response": []
         },
         {
-          "name": "Update Availability",
+          "name": "[TECHNICIAN] Update Availability",
           "event": [
             {
               "listen": "test",
@@ -2519,7 +2638,14 @@
             "method": "PATCH",
             "header": [],
             "auth": {
-              "type": "inherit"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{technicianAccessToken}}",
+                  "type": "string"
+                }
+              ]
             },
             "body": {
               "mode": "raw",
@@ -2549,12 +2675,12 @@
                 }
               ]
             },
-            "description": "Requires `TECHNICIAN`, and only for a slot the caller owns. All fields optional, but the same past-date, time-order and overlap checks apply. Booked slots cannot be edited."
+            "description": "**Access: TECHNICIAN only** — requires a token whose `role` claim is TECHNICIAN. Uses `{{technicianAccessToken}}`.\n\nRequires `TECHNICIAN`, and only for a slot the caller owns. All fields optional, but the same past-date, time-order and overlap checks apply. Booked slots cannot be edited."
           },
           "response": []
         },
         {
-          "name": "Delete Availability",
+          "name": "[TECHNICIAN] Delete Availability",
           "event": [
             {
               "listen": "test",
@@ -2582,7 +2708,14 @@
             "method": "DELETE",
             "header": [],
             "auth": {
-              "type": "inherit"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{technicianAccessToken}}",
+                  "type": "string"
+                }
+              ]
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/availability/:id",
@@ -2603,7 +2736,7 @@
                 }
               ]
             },
-            "description": "Requires `TECHNICIAN`, and only for a slot the caller owns. Booked slots cannot be deleted — cancel the booking first, which frees the slot."
+            "description": "**Access: TECHNICIAN only** — requires a token whose `role` claim is TECHNICIAN. Uses `{{technicianAccessToken}}`.\n\nRequires `TECHNICIAN`, and only for a slot the caller owns. Booked slots cannot be deleted — cancel the booking first, which frees the slot."
           },
           "response": []
         }
@@ -2614,7 +2747,7 @@
       "description": "Booking lifecycle under `/api/v1/bookings`. Customers create, list, cancel and read bookings; technicians list their own queue and drive status transitions.\n\nValid transitions: PENDING to ACCEPTED / REJECTED / CANCELLED, ACCEPTED to IN_PROGRESS / CANCELLED, IN_PROGRESS to COMPLETED / CANCELLED. COMPLETED, REJECTED and CANCELLED are terminal. REJECTING or CANCELLING frees the availability slot.",
       "item": [
         {
-          "name": "Create Booking",
+          "name": "[CUSTOMER] Create Booking",
           "event": [
             {
               "listen": "test",
@@ -2643,7 +2776,14 @@
             "method": "POST",
             "header": [],
             "auth": {
-              "type": "inherit"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerAccessToken}}",
+                  "type": "string"
+                }
+              ]
             },
             "body": {
               "mode": "raw",
@@ -2665,12 +2805,12 @@
                 "bookings"
               ]
             },
-            "description": "Requires `CUSTOMER`. All ids must be valid UUIDs: `technicianId` (a TechnicianProfile id), `serviceId`, and `availabilityId` (an unbooked, unrequested slot belonging to that technician). `address` is 10-500 chars, `problemDescription` 10-1000 chars.\n\nCreates the booking as PENDING, prices it from the service and marks the slot as booked, all in one transaction. Captures `{{bookingId}}`."
+            "description": "**Access: CUSTOMER only** — requires a token whose `role` claim is CUSTOMER. Uses `{{customerAccessToken}}`.\n\nRequires `CUSTOMER`. All ids must be valid UUIDs: `technicianId` (a TechnicianProfile id), `serviceId`, and `availabilityId` (an unbooked, unrequested slot belonging to that technician). `address` is 10-500 chars, `problemDescription` 10-1000 chars.\n\nCreates the booking as PENDING, prices it from the service and marks the slot as booked, all in one transaction. Captures `{{bookingId}}`."
           },
           "response": []
         },
         {
-          "name": "Get My Bookings (Customer)",
+          "name": "[CUSTOMER] Get My Bookings (Customer)",
           "event": [
             {
               "listen": "test",
@@ -2700,7 +2840,14 @@
             "method": "GET",
             "header": [],
             "auth": {
-              "type": "inherit"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerAccessToken}}",
+                  "type": "string"
+                }
+              ]
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/bookings/my?status=&page=1&limit=10",
@@ -2734,12 +2881,12 @@
                 }
               ]
             },
-            "description": "Requires `CUSTOMER`. Paginated bookings for the caller with service, technician, availability, payment and review expanded.\n\nCaptures the first booking id into `{{bookingId}}`."
+            "description": "**Access: CUSTOMER only** — requires a token whose `role` claim is CUSTOMER. Uses `{{customerAccessToken}}`.\n\nRequires `CUSTOMER`. Paginated bookings for the caller with service, technician, availability, payment and review expanded.\n\nCaptures the first booking id into `{{bookingId}}`."
           },
           "response": []
         },
         {
-          "name": "Get My Bookings (Technician)",
+          "name": "[TECHNICIAN] Get My Bookings (Technician)",
           "event": [
             {
               "listen": "test",
@@ -2769,7 +2916,14 @@
             "method": "GET",
             "header": [],
             "auth": {
-              "type": "inherit"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{technicianAccessToken}}",
+                  "type": "string"
+                }
+              ]
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/bookings/technician/my?status=&page=1&limit=10",
@@ -2804,12 +2958,12 @@
                 }
               ]
             },
-            "description": "Requires `TECHNICIAN`. The technician-side view of the same booking list, with the customer record expanded.\n\nCaptures the first booking id into `{{bookingId}}`."
+            "description": "**Access: TECHNICIAN only** — requires a token whose `role` claim is TECHNICIAN. Uses `{{technicianAccessToken}}`.\n\nRequires `TECHNICIAN`. The technician-side view of the same booking list, with the customer record expanded.\n\nCaptures the first booking id into `{{bookingId}}`."
           },
           "response": []
         },
         {
-          "name": "Get Booking By ID",
+          "name": "[CUSTOMER] Get Booking By ID",
           "event": [
             {
               "listen": "test",
@@ -2838,7 +2992,14 @@
             "method": "GET",
             "header": [],
             "auth": {
-              "type": "inherit"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerAccessToken}}",
+                  "type": "string"
+                }
+              ]
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/bookings/:id",
@@ -2859,12 +3020,12 @@
                 }
               ]
             },
-            "description": "Requires `CUSTOMER` or `TECHNICIAN`, and only if the caller is the booking's customer or its assigned technician. Returns the full relation graph."
+            "description": "**Access: CUSTOMER only** — requires a token whose `role` claim is CUSTOMER. Uses `{{customerAccessToken}}`.\n\nRequires `CUSTOMER` or `TECHNICIAN`, and only if the caller is the booking's customer or its assigned technician. Returns the full relation graph."
           },
           "response": []
         },
         {
-          "name": "Update Booking Status",
+          "name": "[TECHNICIAN] Update Booking Status",
           "event": [
             {
               "listen": "test",
@@ -2893,7 +3054,14 @@
             "method": "PATCH",
             "header": [],
             "auth": {
-              "type": "inherit"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{technicianAccessToken}}",
+                  "type": "string"
+                }
+              ]
             },
             "body": {
               "mode": "raw",
@@ -2924,7 +3092,7 @@
                 }
               ]
             },
-            "description": "Requires `TECHNICIAN`, and only for a booking assigned to them. Body is a single `status` field; `PENDING` is not accepted here because the transition out of it is ACCEPTED, REJECTED or CANCELLED.\n\nRun these in order to walk a booking to completion: ACCEPTED -> IN_PROGRESS -> COMPLETED. Rejecting or cancelling frees the availability slot."
+            "description": "**Access: TECHNICIAN only** — requires a token whose `role` claim is TECHNICIAN. Uses `{{technicianAccessToken}}`.\n\nRequires `TECHNICIAN`, and only for a booking assigned to them. Body is a single `status` field; `PENDING` is not accepted here because the transition out of it is ACCEPTED, REJECTED or CANCELLED.\n\nRun these in order to walk a booking to completion: ACCEPTED -> IN_PROGRESS -> COMPLETED. Rejecting or cancelling frees the availability slot."
           },
           "response": [
             {
@@ -2945,7 +3113,7 @@
           ]
         },
         {
-          "name": "Cancel Booking",
+          "name": "[CUSTOMER] Cancel Booking",
           "event": [
             {
               "listen": "test",
@@ -2974,7 +3142,14 @@
             "method": "PATCH",
             "header": [],
             "auth": {
-              "type": "inherit"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerAccessToken}}",
+                  "type": "string"
+                }
+              ]
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/bookings/:id/cancel",
@@ -2996,7 +3171,7 @@
                 }
               ]
             },
-            "description": "Requires `CUSTOMER`, and only for the caller's own booking while it is still PENDING or ACCEPTED. Sets status CANCELLED and releases the availability slot in the same transaction."
+            "description": "**Access: CUSTOMER only** — requires a token whose `role` claim is CUSTOMER. Uses `{{customerAccessToken}}`.\n\nRequires `CUSTOMER`, and only for the caller's own booking while it is still PENDING or ACCEPTED. Sets status CANCELLED and releases the availability slot in the same transaction."
           },
           "response": []
         }
@@ -3007,7 +3182,7 @@
       "description": "Stripe-backed payments under `/api/v1/payments`. A booking must be ACCEPTED before checkout, and each booking can have at most one payment record.",
       "item": [
         {
-          "name": "Create Stripe Checkout",
+          "name": "[CUSTOMER] Create Stripe Checkout",
           "event": [
             {
               "listen": "test",
@@ -3039,7 +3214,14 @@
             "method": "POST",
             "header": [],
             "auth": {
-              "type": "inherit"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerAccessToken}}",
+                  "type": "string"
+                }
+              ]
             },
             "body": {
               "mode": "raw",
@@ -3062,7 +3244,7 @@
                 "checkout"
               ]
             },
-            "description": "Requires `CUSTOMER`. Body is just `bookingId` (UUID). The booking must be ACCEPTED and unpaid. Creates or updates the payment record as PENDING with the Checkout Session id as `transactionId`, and returns the hosted `checkoutUrl` plus `sessionId` and the amount in the major currency unit (Stripe receives cents).\n\nCaptures `{{sessionId}}` and `{{checkoutUrl}}`."
+            "description": "**Access: CUSTOMER only** — requires a token whose `role` claim is CUSTOMER. Uses `{{customerAccessToken}}`.\n\nRequires `CUSTOMER`. Body is just `bookingId` (UUID). The booking must be ACCEPTED and unpaid. Creates or updates the payment record as PENDING with the Checkout Session id as `transactionId`, and returns the hosted `checkoutUrl` plus `sessionId` and the amount in the major currency unit (Stripe receives cents).\n\nCaptures `{{sessionId}}` and `{{checkoutUrl}}`."
           },
           "response": [
             {
@@ -3144,12 +3326,12 @@
                 "webhook"
               ]
             },
-            "description": "Called by Stripe, not by clients. Handled on a dedicated `express.raw` mount in `src/app.ts`, which runs before the JSON body parser so the raw payload stays byte-exact for signature verification. A missing `stripe-signature` header returns 400.\n\nHandles `checkout.session.completed` (payment -> PAID, stamps `paidAt`) and `payment_intent.payment_failed` (payment -> FAILED). The upsert is keyed on the unique `bookingId`, so replays are idempotent.\n\nThe signature must match `STRIPE_WEBHOOK_SECRET`. Hand-rolled payloads fail verification, so use `stripe listen --forward-to localhost:5000/api/v1/payments/webhook` for a real test."
+            "description": "**Access: signature-verified** — no JWT, no role tag. Auth is the `stripe-signature` header, checked against `STRIPE_WEBHOOK_SECRET`.\n\nCalled by Stripe, not by clients. Handled on a dedicated `express.raw` mount in `src/app.ts`, which runs before the JSON body parser so the raw payload stays byte-exact for signature verification. A missing `stripe-signature` header returns 400.\n\nHandles `checkout.session.completed` (payment -> PAID, stamps `paidAt`) and `payment_intent.payment_failed` (payment -> FAILED). The upsert is keyed on the unique `bookingId`, so replays are idempotent.\n\nThe signature must match `STRIPE_WEBHOOK_SECRET`. Hand-rolled payloads fail verification, so use `stripe listen --forward-to localhost:5000/api/v1/payments/webhook` for a real test."
           },
           "response": []
         },
         {
-          "name": "Get My Payments",
+          "name": "[CUSTOMER] Get My Payments",
           "event": [
             {
               "listen": "test",
@@ -3179,7 +3361,14 @@
             "method": "GET",
             "header": [],
             "auth": {
-              "type": "inherit"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerAccessToken}}",
+                  "type": "string"
+                }
+              ]
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/payments/my?status=&page=1&limit=10",
@@ -3213,12 +3402,12 @@
                 }
               ]
             },
-            "description": "Requires `CUSTOMER`. Paginated payment history with the related booking expanded. Captures the first payment id into `{{paymentId}}`."
+            "description": "**Access: CUSTOMER only** — requires a token whose `role` claim is CUSTOMER. Uses `{{customerAccessToken}}`.\n\nRequires `CUSTOMER`. Paginated payment history with the related booking expanded. Captures the first payment id into `{{paymentId}}`."
           },
           "response": []
         },
         {
-          "name": "Get Payment By ID",
+          "name": "[CUSTOMER] Get Payment By ID",
           "event": [
             {
               "listen": "test",
@@ -3247,7 +3436,14 @@
             "method": "GET",
             "header": [],
             "auth": {
-              "type": "inherit"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerAccessToken}}",
+                  "type": "string"
+                }
+              ]
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/payments/:id",
@@ -3268,7 +3464,7 @@
                 }
               ]
             },
-            "description": "Requires `CUSTOMER`, and only for a payment on one of the caller's own bookings. Returns the payment with the full booking relation graph."
+            "description": "**Access: CUSTOMER only** — requires a token whose `role` claim is CUSTOMER. Uses `{{customerAccessToken}}`.\n\nRequires `CUSTOMER`, and only for a payment on one of the caller's own bookings. Returns the payment with the full booking relation graph."
           },
           "response": []
         }
@@ -3279,7 +3475,7 @@
       "description": "Reviews under `/api/v1/reviews`. A review requires the booking to be COMPLETED and paid, and there can be only one per booking. Every write recalculates the technician's aggregate `rating` and `totalReviews`.",
       "item": [
         {
-          "name": "Create Review",
+          "name": "[CUSTOMER] Create Review",
           "event": [
             {
               "listen": "test",
@@ -3308,7 +3504,14 @@
             "method": "POST",
             "header": [],
             "auth": {
-              "type": "inherit"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerAccessToken}}",
+                  "type": "string"
+                }
+              ]
             },
             "body": {
               "mode": "raw",
@@ -3330,7 +3533,7 @@
                 "reviews"
               ]
             },
-            "description": "Requires `CUSTOMER`. `bookingId` must be a UUID for one of your own COMPLETED bookings whose payment is PAID, and it must not already be reviewed. `rating` is an integer 1-5; `comment` is optional up to 1000 chars.\n\nCaptures `{{reviewId}}`."
+            "description": "**Access: CUSTOMER only** — requires a token whose `role` claim is CUSTOMER. Uses `{{customerAccessToken}}`.\n\nRequires `CUSTOMER`. `bookingId` must be a UUID for one of your own COMPLETED bookings whose payment is PAID, and it must not already be reviewed. `rating` is an integer 1-5; `comment` is optional up to 1000 chars.\n\nCaptures `{{reviewId}}`."
           },
           "response": []
         },
@@ -3401,7 +3604,7 @@
                 }
               ]
             },
-            "description": "Public, paginated reviews for a technician with the reviewer expanded. Captures the first review id into `{{reviewId}}`."
+            "description": "**Access: public** — no token required.\n\nPublic, paginated reviews for a technician with the reviewer expanded. Captures the first review id into `{{reviewId}}`."
           },
           "response": []
         },
@@ -3456,12 +3659,12 @@
                 }
               ]
             },
-            "description": "Public lookup of a single review. Captures `{{reviewId}}`."
+            "description": "**Access: public** — no token required.\n\nPublic lookup of a single review. Captures `{{reviewId}}`."
           },
           "response": []
         },
         {
-          "name": "Update Review",
+          "name": "[CUSTOMER] Update Review",
           "event": [
             {
               "listen": "test",
@@ -3490,7 +3693,14 @@
             "method": "PATCH",
             "header": [],
             "auth": {
-              "type": "inherit"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerAccessToken}}",
+                  "type": "string"
+                }
+              ]
             },
             "body": {
               "mode": "raw",
@@ -3520,12 +3730,12 @@
                 }
               ]
             },
-            "description": "Requires `CUSTOMER`, and only on your own review. Both fields optional. The technician aggregate rating is recomputed from the remaining reviews."
+            "description": "**Access: CUSTOMER only** — requires a token whose `role` claim is CUSTOMER. Uses `{{customerAccessToken}}`.\n\nRequires `CUSTOMER`, and only on your own review. Both fields optional. The technician aggregate rating is recomputed from the remaining reviews."
           },
           "response": []
         },
         {
-          "name": "Delete Review",
+          "name": "[CUSTOMER] Delete Review",
           "event": [
             {
               "listen": "test",
@@ -3553,7 +3763,14 @@
             "method": "DELETE",
             "header": [],
             "auth": {
-              "type": "inherit"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerAccessToken}}",
+                  "type": "string"
+                }
+              ]
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/reviews/:id",
@@ -3574,7 +3791,7 @@
                 }
               ]
             },
-            "description": "Requires `CUSTOMER`, and only on your own review. Deleting recalculates the technician's aggregate rating and review count."
+            "description": "**Access: CUSTOMER only** — requires a token whose `role` claim is CUSTOMER. Uses `{{customerAccessToken}}`.\n\nRequires `CUSTOMER`, and only on your own review. Deleting recalculates the technician's aggregate rating and review count."
           },
           "response": []
         }
@@ -3585,7 +3802,7 @@
       "description": "Read-only dashboard aggregates under `/api/v1/analytics`. Each endpoint is guarded to exactly one role, so sign in as that role before running it. Decimal columns (`totalAmount`, `amount`) are aggregated to plain numbers in the response.",
       "item": [
         {
-          "name": "Admin Analytics",
+          "name": "[ADMIN] Admin Analytics",
           "event": [
             {
               "listen": "test",
@@ -3616,7 +3833,14 @@
             "method": "GET",
             "header": [],
             "auth": {
-              "type": "inherit"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminAccessToken}}",
+                  "type": "string"
+                }
+              ]
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/analytics/admin",
@@ -3630,7 +3854,7 @@
                 "admin"
               ]
             },
-            "description": "Requires `ADMIN`. Platform totals: technician and customer counts, service counts, booking counts by status, and revenue / refunds summed over PAID and REFUNDED payments."
+            "description": "**Access: ADMIN only** — requires a token whose `role` claim is ADMIN. Uses `{{adminAccessToken}}`.\n\nRequires `ADMIN`. Platform totals: technician and customer counts, service counts, booking counts by status, and revenue / refunds summed over PAID and REFUNDED payments."
           },
           "response": [
             {
@@ -3651,7 +3875,7 @@
           ]
         },
         {
-          "name": "Customer Analytics",
+          "name": "[CUSTOMER] Customer Analytics",
           "event": [
             {
               "listen": "test",
@@ -3679,7 +3903,14 @@
             "method": "GET",
             "header": [],
             "auth": {
-              "type": "inherit"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{customerAccessToken}}",
+                  "type": "string"
+                }
+              ]
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/analytics/customer",
@@ -3693,12 +3924,12 @@
                 "customer"
               ]
             },
-            "description": "Requires `CUSTOMER`. Booking totals for the caller, upcoming / completed / cancelled counts, and total spent and refunded."
+            "description": "**Access: CUSTOMER only** — requires a token whose `role` claim is CUSTOMER. Uses `{{customerAccessToken}}`.\n\nRequires `CUSTOMER`. Booking totals for the caller, upcoming / completed / cancelled counts, and total spent and refunded."
           },
           "response": []
         },
         {
-          "name": "Technician Analytics",
+          "name": "[TECHNICIAN] Technician Analytics",
           "event": [
             {
               "listen": "test",
@@ -3726,7 +3957,14 @@
             "method": "GET",
             "header": [],
             "auth": {
-              "type": "inherit"
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{technicianAccessToken}}",
+                  "type": "string"
+                }
+              ]
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/analytics/technician",
@@ -3740,7 +3978,7 @@
                 "technician"
               ]
             },
-            "description": "Requires `TECHNICIAN`. Availability and slot counts, bookings by status, earnings and refunds, and the current rating and review count. Requires a technician profile to exist — run Create Technician Profile first."
+            "description": "**Access: TECHNICIAN only** — requires a token whose `role` claim is TECHNICIAN. Uses `{{technicianAccessToken}}`.\n\nRequires `TECHNICIAN`. Availability and slot counts, bookings by status, earnings and refunds, and the current rating and review count. Requires a technician profile to exist — run Create Technician Profile first."
           },
           "response": []
         }

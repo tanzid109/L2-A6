@@ -22,7 +22,7 @@ router.get("/:id", ServiceController.getServiceById);
 
 router.post(
   "/",
-  auth(Role.ADMIN),
+  auth(Role.ADMIN, Role.TECHNICIAN),
   upload.single("image"),
   validateRequest(createServiceSchema),
   ServiceController.createService,
@@ -30,12 +30,16 @@ router.post(
 
 router.patch(
   "/:id",
-  auth(Role.ADMIN),
+  auth(Role.ADMIN, Role.TECHNICIAN),
   upload.single("image"),
   validateRequest(updateServiceSchema),
   ServiceController.updateService,
 );
 
-router.delete("/:id", auth(Role.ADMIN), ServiceController.deleteService);
+router.delete(
+  "/:id",
+  auth(Role.ADMIN, Role.TECHNICIAN),
+  ServiceController.deleteService,
+);
 
 export const ServiceRoutes = router;

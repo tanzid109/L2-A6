@@ -5,7 +5,11 @@ import { ServiceService } from "./service.service";
 import httpStatus from "http-status";
 
 const createService = catchAsync(async (req: Request, res: Response) => {
-  const result = await ServiceService.createService(req.body, req.file);
+  const result = await ServiceService.createService(
+    req.user!.userId,
+    req.body,
+    req.file,
+  );
 
   sendResponse(res, {
     statusCode: httpStatus.CREATED,
@@ -39,6 +43,8 @@ const getServiceById = catchAsync(async (req: Request, res: Response) => {
 
 const updateService = catchAsync(async (req: Request, res: Response) => {
   const result = await ServiceService.updateService(
+    req.user!.userId,
+    req.user!.role,
     req.params.id as string,
     req.body,
     req.file,
@@ -53,7 +59,11 @@ const updateService = catchAsync(async (req: Request, res: Response) => {
 });
 
 const deleteService = catchAsync(async (req: Request, res: Response) => {
-  const result = await ServiceService.deleteService(req.params.id as string);
+  const result = await ServiceService.deleteService(
+    req.user!.userId,
+    req.user!.role,
+    req.params.id as string,
+  );
 
   sendResponse(res, {
     statusCode: httpStatus.OK,

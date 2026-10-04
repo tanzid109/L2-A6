@@ -10,6 +10,9 @@ model Service {
   imagePublicId String  @default("")
   isActive      Boolean @default(true)
 
+  createdById String?
+  createdBy   User?   @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
   bookings Booking[]
 
   createdAt DateTime @default(now())
@@ -17,5 +20,6 @@ model Service {
 
   @@index([category])
   @@index([isActive])
+  @@index([createdById])
   @@map("services")
 }

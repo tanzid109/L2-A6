@@ -20,6 +20,8 @@ model User {
 
   reviews Review[]
 
+  createdServices Service[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
