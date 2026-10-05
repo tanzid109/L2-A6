@@ -2,7 +2,10 @@ import { Router } from "express";
 import { Role } from "../../../generated/prisma/enums";
 import { auth } from "../../middleware/checkAuth";
 import { upload } from "../../lib/multer";
-import { validateRequest } from "../../middleware/validateRequest";
+import {
+	validateQuery,
+	validateRequest,
+} from "../../middleware/validateRequest";
 import { TechnicianController } from "./technician.controller";
 import {
 	applyAsTechnicianSchema,
@@ -36,7 +39,7 @@ router.get(
 router.get(
 	"/applications",
 	auth(Role.ADMIN),
-	validateRequest(applicationQuerySchema),
+	validateQuery(applicationQuerySchema),
 	TechnicianController.getApplications,
 );
 
@@ -56,7 +59,7 @@ router.patch(
 
 router.get(
 	"/",
-	validateRequest(technicianQuerySchema),
+	validateQuery(technicianQuerySchema),
 	TechnicianController.getAllTechnicians,
 );
 router.get("/:id", TechnicianController.getTechnicianById);

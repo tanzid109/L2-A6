@@ -2,6 +2,7 @@ import { NextFunction, Request, Response } from 'express';
 import httpStatus from "http-status";
 import { Prisma } from '../../generated/prisma/client';
 import config from '../config';
+import { AppError } from '../utils/AppError';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const globalErrorHandler = async (
@@ -19,7 +20,11 @@ export const globalErrorHandler = async (
     let errorName = err.name || "Internal Server Error";
     // let errorDetails = err.stack
 
-    if (err instanceof Prisma.PrismaClientValidationError) {
+    if (err instanceof AppError) {
+        statusCode = err.statusCode;
+        errorMessage = err.message;
+        errorName = err.name;
+    } else if (err instanceof Prisma.PrismaClientValidationError) {
         statusCode = httpStatus.BAD_REQUEST;
         errorMessage = "You have provided incorrect field type or missing fields"
     } else if (err instanceof Prisma.PrismaClientKnownRequestError) {
@@ -52,11 +57,13 @@ export const globalErrorHandler = async (
 
 
 
-    res.status(httpStatus.INTERNAL_SERVER_ERROR).json({
+    const expose = config.node_env === 'development' || statusCode < httpStatus.INTERNAL_SERVER_ERROR;
+
+    res.status(statusCode || httpStatus.INTERNAL_SERVER_ERROR).json({
         success: false,
         statusCode: statusCode || httpStatus.INTERNAL_SERVER_ERROR,
-        name: config.node_env === 'development' ? errorName : "Internal Server Error",
-        message: config.node_env === 'development' ? errorMessage : "Internal Server Error",
+        name: expose ? errorName : "Internal Server Error",
+        message: expose ? errorMessage : "Internal Server Error",
         error: config.node_env === 'development' ? err : undefined,
         stack: config.node_env  === 'development' ? err.stack : undefined,
     })
